@@ -51,11 +51,25 @@ try {
   console.log("작업대 번역:", trans);
   console.log("고객 화면:", cust);
 
+  // 고객(태블릿)이 자기 화면에서 입력 → 운영자 작업대에 theirs 로 역번역 수신
+  const beforeTheirs = await page.locator(".work .row.theirs").count();
+  await page.fill(".customer .device .dfield", "Can you move the meeting to Friday afternoon?");
+  await page.click(".customer .device .dsend");
+  await page.waitForFunction(
+    (n) => document.querySelectorAll(".work .row.theirs").length > n,
+    beforeTheirs,
+    { timeout: 40000 },
+  );
+  const inbound = (await page.locator(".work .row.theirs").last().locator(".trans").textContent())
+    ?.replace(/^→ \w+/, "").trim();
+  console.log("고객→운영자 역번역:", inbound);
+
   if (!draft || draft.length < 5) throw new Error("IME 초벌이 안 뜸 (버그 미수정)");
   if (!trans || trans.length < 5) throw new Error("작업대 번역 없음");
   if (!cust || cust.length < 5) throw new Error("고객 화면 미반영");
+  if (!inbound || inbound.length < 5) throw new Error("고객 입력 역번역 미동작");
   if (errors.length) throw new Error("콘솔 에러: " + errors.join(" | "));
-  console.log("\nSMOKE PASS ✅  3분할 + 한글 IME 초벌 + 고객화면 동작");
+  console.log("\nSMOKE PASS ✅  3분할 + IME 초벌 + 양방향(운영자↔고객) 번역");
   await browser.close();
 } catch (e) {
   console.error("SMOKE FAIL ❌", e.message);
