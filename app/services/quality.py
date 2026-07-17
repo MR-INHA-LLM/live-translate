@@ -33,13 +33,21 @@ class QualityService:
         self, session: Session, text: str, rerank: bool
     ) -> AsyncIterator[TurnTokenEvent | TurnDoneEvent | TurnErrorEvent]:
         """최종 번역 이벤트(token→done)를 스트리밍하고 턴을 저장한다."""
-        prior = await self._repo.recent_turns(session.id, 5)
+        prior = await self._repo.recent_turns(session.id, self._context.max_turns)
         turn_id = max((t.turn_id for t in prior), default=0) + 1
-        binding = self._registry.resolve(session.draft_model)  # M1 degrade
+        # M1: 전용 quality 모델 미서빙 → draft 모델을 쓰되 **직전 턴 맥락을 주입**해
+        # context-aware 최종을 만든다(대명사·생략 복원). draft(맥락 없음)와 실질적으로 다름.
+        binding = self._registry.resolve(session.draft_model)
         task = TranslationTask(session.src_lang, session.tgt_lang, text)
+        ctx = self._context.build(prior)
+        messages = (
+            binding.prompt_builder.build_contextual(task, ctx)
+            if ctx.turns
+            else binding.prompt_builder.build(task)
+        )
         req = EngineRequest(
             model=session.draft_model,
-            messages=binding.prompt_builder.build(task),
+            messages=messages,
             temperature=0.0,
             max_tokens=len(text) * 3 + 16,
         )
@@ -59,6 +67,6 @@ class QualityService:
             session.id, Turn(turn_id=turn_id, source=text, draft={session.tgt_lang: final}, final=final)
         )
         yield TurnDoneEvent(
-            turn_id=turn_id, translation=final, degraded=True,
+            turn_id=turn_id, translation=final, degraded=False,
             latency=LatencyInfo(ttft_ms=ttft, total_ms=(time.perf_counter() - t0) * 1000),
         )
