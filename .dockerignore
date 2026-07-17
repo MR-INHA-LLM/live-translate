@@ -5,9 +5,12 @@ logs/
 bench/
 docs/
 tests/
-web/
 .git/
 __pycache__/
 *.pyc
 *.log
 .env
+# web: 소스는 nginx 빌드에 필요, 산출물만 제외
+web/node_modules/
+web/dist/
+web/e2e-smoke.mjs

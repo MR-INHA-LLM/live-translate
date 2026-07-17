@@ -76,14 +76,18 @@ FE 브라우저 스모크: `node web/e2e-smoke.mjs` (게이트웨이 :8000 + pre
 
 ## Docker Compose 배포 (nginx 리버스 프록시)
 
-`nginx(:18090) → gateway → vLLM` 경로. 기본은 호스트에 떠 있는 vLLM(:8001)에 붙는다.
+**한 명령**으로 채팅앱(FE) + API가 뜬다. nginx가 빌드된 FE를 정적 서빙 + `/api`·WS·SSE를
+게이트웨이로 프록시. 기본은 호스트 vLLM(:8001) 사용.
 
 ```bash
-docker compose up -d --build        # gateway + nginx (호스트 vLLM 사용)
-curl http://localhost:18090/health
-docker compose --profile gpu up -d  # vLLM(GPU)까지 자체완결 (DRAFT_URL을 vllm-draft로)
+docker compose up -d --build          # FE + gateway + nginx → http://localhost:18090
+docker compose --profile gpu up -d    # vLLM(GPU)까지 자체완결 (DRAFT_URL을 vllm-draft로)
 ```
 
-- **nginx**(`deploy/nginx.conf`): WS 업그레이드 + SSE(`proxy_buffering off`) + REST 프록시.
-- **gateway** 환경변수: `DRAFT_URL`·`QUALITY_URL`·`DRAFT_MODEL`·`DB_URL`·`CORS_ORIGINS`.
-- E2E: `uv run pytest tests/e2e`(게이트웨이 :18080 기동 → REST·WS·SSE 실번역 검증).
+- **접속**: `http://localhost:18090`(채팅앱). API·health 동일 오리진(`/api/v1/...`, `/health`).
+- **nginx**(`deploy/Dockerfile.nginx` + `deploy/nginx.conf`): FE 정적 + WS 업그레이드 +
+  SSE(`proxy_buffering off`) 프록시.
+- **안정성**: gateway healthcheck(`/health`) + `restart: unless-stopped`, nginx는
+  `depends_on: gateway(service_healthy)`로 준비 후 기동.
+- **gateway** env: `DRAFT_URL`·`QUALITY_URL`·`DRAFT_MODEL`·`DB_URL`·`CORS_ORIGINS`.
+- E2E: `uv run pytest tests/e2e`(REST·WS·SSE) · FE 스모크 `SMOKE_URL=http://localhost:18090 node web/e2e-smoke.mjs`.

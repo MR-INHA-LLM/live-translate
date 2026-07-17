@@ -1,8 +1,9 @@
 // 게이트웨이 API 클라이언트 — REST · WS(초벌) · SSE(최종).
 // 타입은 백엔드 app/schemas 와 1:1.
 
-export const API_BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:8000";
+// 기본은 same-origin("") — nginx가 FE 정적 서빙 + /api 프록시(배포), dev는 vite 프록시.
+// 별도 게이트웨이 주소를 쓰려면 VITE_API_BASE=http://host:8000.
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
 export interface LanguageInfo {
   code: string;
@@ -53,7 +54,8 @@ export async function createSession(config: SessionConfig): Promise<string> {
 }
 
 export function openDraftSocket(sessionId: string): WebSocket {
-  const url = API_BASE.replace(/^http/, "ws") + `/api/v1/sessions/${sessionId}/stream`;
+  const httpBase = API_BASE || `${location.protocol}//${location.host}`;
+  const url = httpBase.replace(/^http/, "ws") + `/api/v1/sessions/${sessionId}/stream`;
   return new WebSocket(url);
 }
 
