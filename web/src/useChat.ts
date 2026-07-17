@@ -23,14 +23,17 @@ const DEFAULT_TGT = "en"; // 기본 쌍 ko⇄en (design). 선택기로 변경.
 export function useChat() {
   const [catalog, setCatalog] = useState<LanguageCatalog | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [revSessionId, setRevSessionId] = useState<string | null>(null); // 고객→운영자 역방향
   const [src, setSrc] = useState(DEFAULT_SRC);
   const [tgt, setTgt] = useState(DEFAULT_TGT);
   const [witnessLang, setWitnessLang] = useState("en");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
+  const [custText, setCustText] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [latency, setLatency] = useState<DraftResponse["latency"] | null>(null);
   const [sending, setSending] = useState(false);
+  const [custSending, setCustSending] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const revision = useRef(0);
@@ -51,6 +54,10 @@ export function useChat() {
       const id = await createSession({ src_lang: src, tgt_lang: tgt, witness_langs: witnessLangs });
       if (cancelled) return;
       setSessionId(id);
+      // 고객(외국인)이 자기 화면에서 입력 → 운영자 언어로 역번역하는 세션.
+      const revId = await createSession({ src_lang: tgt, tgt_lang: src, witness_langs: [] });
+      if (cancelled) return;
+      setRevSessionId(revId);
       const sock = openDraftSocket(id);
       sock.onmessage = (ev) => {
         const msg = JSON.parse(ev.data) as DraftResponse;
@@ -132,6 +139,30 @@ export function useChat() {
     }
   }, [text, sessionId, sending, draft, tgt, witnessLang]);
 
+  const sendFromCustomer = useCallback(async () => {
+    const source = custText.trim();
+    if (!source || !revSessionId || custSending) return;
+    setCustSending(true);
+    setCustText("");
+    try {
+      await streamTurn(revSessionId, source, {
+        onDone: (done) => {
+          setMessages((m) => [
+            ...m,
+            {
+              id: `c-${done.turn_id}-${Date.now()}`,
+              side: "theirs",
+              source, // 고객이 입력한 원문(tgt 언어)
+              translation: done.translation, // 운영자 언어(src)로 번역
+            },
+          ]);
+        },
+      });
+    } finally {
+      setCustSending(false);
+    }
+  }, [custText, revSessionId, custSending]);
+
   const swap = useCallback(() => {
     setMessages([]);
     setSrc(tgt);
@@ -144,8 +175,9 @@ export function useChat() {
   );
 
   return {
-    catalog, sessionId, src, tgt, setTgt, swap, witnessLang, nameOf,
+    catalog, sessionId, revSessionId, src, tgt, setTgt, swap, witnessLang, nameOf,
     messages, text, onInput, draft, latency, sending, send,
+    custText, setCustText, custSending, sendFromCustomer,
     onCompositionStart, onCompositionEnd,
   };
 }

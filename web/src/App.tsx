@@ -114,18 +114,42 @@ export default function App() {
         </div>
       </main>
 
-      {/* ③ 우: 고객 화면 (고객이 실제 보는 것) */}
+      {/* ③ 우: 고객 화면 — 빈 스테이지 위에 기기(폰)처럼 부양 */}
       <aside className="col customer">
-        <header className="chead">고객 화면 · {c.nameOf(c.tgt)}</header>
-        <div className="feed cust" ref={custRef}>
-          {c.messages.length === 0 && <p className="empty center">—</p>}
-          {c.messages.map((m) => (
-            <div key={m.id} className={`crow ${m.side === "mine" ? "in" : "out"}`}>
-              <div className="cbubble">{m.side === "mine" ? m.translation : m.source}</div>
-            </div>
-          ))}
+        <div className="stagelabel">고객이 보는 화면 · {c.nameOf(c.tgt)}</div>
+        <div className="device">
+          <header className="dhead">번역 대화</header>
+          <div className="feed cust" ref={custRef}>
+            {c.messages.length === 0 && <p className="empty center">—</p>}
+            {c.messages.map((m) => (
+              <div key={m.id} className={`crow ${m.side === "mine" ? "in" : "out"}`}>
+                <div className="cbubble">{m.side === "mine" ? m.translation : m.source}</div>
+              </div>
+            ))}
+          </div>
+          <div className="dcompose">
+            <input
+              className="dfield"
+              placeholder={`${c.nameOf(c.tgt)}로 입력…`}
+              value={c.custText}
+              disabled={!c.revSessionId}
+              onChange={(e) => c.setCustText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  void c.sendFromCustomer();
+                }
+              }}
+            />
+            <button
+              className="dsend"
+              onClick={() => void c.sendFromCustomer()}
+              disabled={c.custSending || !c.custText.trim()}
+            >
+              {c.custSending ? "…" : "↑"}
+            </button>
+          </div>
         </div>
-        <div className="cfoot">고객은 번역된 {c.nameOf(c.tgt)}만 봅니다.</div>
       </aside>
     </div>
   );
