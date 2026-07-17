@@ -16,5 +16,10 @@ dependencies = [
     "openai>=2.46.0",
 ]
 
+[project.optional-dependencies]
+bench = [
+    "simalign>=0.4",
+]
+
 [tool.uv]
 # vLLM installed into the same env in a later step (heavy)

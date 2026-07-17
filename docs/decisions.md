@@ -207,3 +207,15 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
 
 > D13 개정: 초기엔 정렬을 deferred로 뒀으나(엄밀 증명 기준), 데모 기준이 "설득력"으로
 > 명확해져 정렬 하이라이팅을 센터피스로 승격. 실현성은 SimAlign로 해결됨(실측 불필요).
+
+**SimAlign 실측 검증 (`bench/align_simalign.py`, mBERT zero-shot, 실제 HY-MT 출력):**
+- 내용어(명사·동사) 대응이 그럴듯하게 나온다 — 예: `회의를→rapat/meeting`,
+  `취소하고→membatalkan/cancel`, `금요일로→Jumat/Friday`, `옮겨→menggantinya/move`,
+  `오후→sore/afternoon`. ko→en·ko→id 모두 데모 설득력 충분.
+- **속도**: 쌍당 26~115ms(턴 확정 시 1회), mBERT 로드 24s 1회. 타이핑과 무관.
+- 약점: 조사/기능어 노이즈, `그거→that` 같은 대명사는 놓침(그거→I 오정렬). 데모
+  하이라이팅에는 내용어 대응이면 충분 — 구현 시 구두점·저신뢰 정렬 제거 + 구 단위 병합.
+- **환경 분리(D7 확장)**: simalign(transformers 필요)은 vLLM·COMET과 transformers/torch
+  버전이 충돌한다(측정 중 torch 2.13↔2.11 재설치 확인). 정렬은 **서빙과 별도 컨테이너**
+  (reranker처럼)로 둔다. `pyproject`의 `bench` optional은 이 도구들을 나열만 하며
+  동일 env 공존 불가.
