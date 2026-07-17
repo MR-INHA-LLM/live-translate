@@ -10,6 +10,7 @@ class TurnRequest(BaseModel):
 
     text: str
     rerank: bool = False
+    idempotency_key: str | None = None  # 재시도 중복 방지 (decisions.md D12)
 
 
 class TurnTokenEvent(BaseModel):

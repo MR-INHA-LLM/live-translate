@@ -377,13 +377,16 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 틀려도 믿는다(automation bias). 그래서 품질은 **숫자가 아니라 시각·상호작용**으로
 보여준다. MT UX 연구에서 검증된 패턴을 조합한다:
 
-| 장치 | 무엇을 보여주나 | 비고 |
+| 장치 | 무엇을 보여주나 | 우선순위 |
 |---|---|---|
-| **구 정렬 hover** | 소스 구 hover → 타겟·witness의 대응 구 강조. 빠짐/환각 없이 커버됨을 눈으로 | CAT 툴 표준. 가장 직관적 |
-| **witness 언어(en)** | 못 읽는 타겟 대신 읽을 수 있는 언어의 독립 forward 번역 | 역번역보다 정직 |
-| **단어 QE 색상** | 모델이 불확실한 구간만 색(green/amber). 단일 점수보다 국소적·정직 | CometKiwi(M4)에서 파생 |
-| **역번역(id→ko) 버튼** | 사용자 언어로 즉석 검증(on-demand) | 신뢰↑지만 거짓확신 위험 → 보조·경고 병기 |
+| **witness 언어(en)** | 못 읽는 타겟 대신 읽을 수 있는 언어의 독립 forward 번역 | **주력** |
+| **단어 QE 색상** | 모델이 불확실한 구간만 색(green/amber). 국소적·정직 | **주력** (CometKiwi 파생, M4) |
+| **역번역(id→ko) 버튼** | 사용자 언어로 즉석 검증(on-demand) | **주력** (보조·경고 병기) |
+| 구 정렬 hover | 소스 구 → 타겟·witness 대응 강조(커버리지) | 보조·**deferred** (D13, 지금 실측 불필요) |
 | 숫자 COMET/QE | 전문가·디버그 패널에만 | lay엔 부적합 |
+
+주력 3종은 별도 정렬 모델 없이 성립한다. 구 정렬 hover는 표준 zero-shot 정렬
+(awesome-align/SimAlign)로 나중에 붙이는 후순위 장치다.
 
 **정직성 원칙**: 다 초록으로 칠하지 않는다. 불확실성을 드러내는 편이 거짓 신뢰보다
 낫다(§8.5와 일치). 근거·출처는 [`decisions.md`](decisions.md) D11.
@@ -435,14 +438,23 @@ draft 승격 배지), **레이턴시 p95**. 실패 모드를 함께 보여준다
 
 ---
 
-## 11. 미해결 / M1 검증 항목
+## 11. 확정된 결정 · 남은 항목
 
-- [ ] vLLM 0.25.x의 **Gemma4 아키텍처 서빙 여부** + 단일 GPU KV 실현성 측정(D6).
-- [ ] 최종 tier TTFT/완료 실측(README §4 미측정 행).
-- [ ] `commit_prefix`를 켤 만한 어순 유사 쌍 식별(예: ko↔ja) — 접두어 확정 실효 측정.
-- [ ] 컨텍스트 길이 증가 시 절단 vs 요약 정책.
-- [ ] rerank(CometKiwi)의 context-aware 변형 학습 여부(M4).
-- [ ] FLORES+ gated 재측정으로 README 원문 데이터셋 parity(gate 승인 후).
+**BE 하드닝 — 결정 완료 (D12):** 백프레셔(tier별 세마포어), 턴 멱등성(idempotency_key),
+인증(데모 무인증·session_id capability), 취소→abort(vLLM disconnect 동작 의존),
+컨텍스트 예산(최근 N턴 + 오래된 것부터 절단, 요약 미도입), 방향 스왑(컨텍스트 리셋).
+
+**품질 근거 — 논문으로 갈음 (D6):** 맥락 tier 개선은 Pombal et al.(TACL 2026) 근거.
+quality 모델은 고정하지 않으므로(교체 가능) 우리 자체 측정은 하지 않는다.
+
+**모델 확정 시점에만 (지금 블로커 아님):**
+- [ ] quality LLM을 하나로 픽스할 때 vLLM 서빙 여부·레이턴시·`--max-model-len` 확인.
+
+**측정 가능해지면 (선택):**
+- [ ] `commit_prefix`를 켤 만한 어순 유사 쌍(예: ko↔ja) 접두어 확정 실효.
+- [ ] rerank(CometKiwi) context-aware 변형(M4).
+- [ ] FLORES+ gated 재측정 parity(gate 승인 후).
+- [ ] 구 정렬 hover 구현 시 정렬 방법·비용(D13 — deferred, 지금 실측 불필요).
 
 **BE 미보강 (자체 점검에서 나온 갭)**
 - [ ] **취소→vLLM abort 가정 검증** — httpx 스트림 close가 실제로 vLLM 생성을 멈추는지 M1에서 확인.

@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 from openai import AsyncOpenAI
@@ -18,15 +19,20 @@ from app.domain import EngineHealth, EngineRequest, Tier, TokenChunk
 class VllmEngine:
     """tier별 vLLM(OpenAI 호환) 인스턴스에 붙는 어댑터."""
 
-    def __init__(self, base_url: str, tier: Tier, api_key: str = "EMPTY") -> None:
+    def __init__(
+        self, base_url: str, tier: Tier, max_concurrency: int = 8, api_key: str = "EMPTY"
+    ) -> None:
         """
         Args:
             base_url: vLLM OpenAI 호환 베이스 URL (예: http://127.0.0.1:8001/v1).
             tier: 이 엔진의 tier.
+            max_concurrency: 백프레셔 — 동시 요청 상한(decisions.md D12). stream()이
+                이 세마포어를 획득한 뒤 호출한다.
             api_key: vLLM은 키 검증을 안 하므로 placeholder.
         """
         self._tier = tier
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        self._sem = asyncio.Semaphore(max_concurrency)
 
     async def stream(self, req: EngineRequest) -> AsyncIterator[TokenChunk]:
         """`chat.completions.create(stream=True)`를 TokenChunk로 변환한다. (TODO: M1)

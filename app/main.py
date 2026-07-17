@@ -38,8 +38,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = Settings()
 
     # 엔진(vLLM OpenAI 호환 클라이언트) + 프롬프트 전략 → 레지스트리
-    draft = VllmEngine(settings.draft_url, Tier.DRAFT)
-    quality = VllmEngine(settings.quality_url, Tier.QUALITY)
+    draft = VllmEngine(settings.draft_url, Tier.DRAFT, settings.engine_max_concurrency)
+    quality = VllmEngine(settings.quality_url, Tier.QUALITY, settings.engine_max_concurrency)
     registry = ModelRegistry()
     registry.register(settings.draft_model, draft, HyMtPromptBuilder(), Tier.DRAFT)
     registry.register(settings.quality_model, quality, GemmaPromptBuilder(), Tier.QUALITY)

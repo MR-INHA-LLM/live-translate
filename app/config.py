@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # 결정성 캐시 (인메모리 LRU — decisions.md D10)
     cache_max_entries: int = 2048
 
+    # 백프레셔: tier당 게이트웨이→vLLM 동시 요청 상한 (decisions.md D12)
+    engine_max_concurrency: int = 8
+
     # 세션 기본값 (양방향 선택기 기본 쌍: ko ⇄ en)
     default_src_lang: str = "ko"
     default_tgt_lang: str = "en"

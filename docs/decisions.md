@@ -83,17 +83,19 @@ WSL2 + nvcc 미설치에서 vLLM 기동에 필요한 플래그는 [`serving.md`]
 
 ## 2026-07-17 · 상세 설계 라운드
 
-### D6. Quality tier 기준 모델 = `gemma-4-E2B` (사용자 지정)
+### D6. Quality tier 모델은 **고정하지 않는다** (OpenAI 호환 뒤 교체 가능)
 
-Gemma 4 계열 중 가장 작은 모델을 quality tier 기준으로 삼는다(사용자 지정: "vLLM로
-구동만 되면"). 실측: `gemma-4-E2B`는 `Gemma4ForConditionalGeneration`(멀티모달 —
-audio/vision config 포함, 텍스트측 `gemma4_text` 35층·**128K 컨텍스트**), bf16
-가중치 **10.25GB**. 번역엔 텍스트 경로만 사용.
+Quality tier 모델은 의도적으로 확정하지 않는다. tier가 OpenAI 호환 API 뒤에 있어
+어떤 LLM이든 붙일 수 있고, 실측으로 하나를 못 박기보다 **교체 가능성**을 유지한다.
+기준(placeholder)은 Gemma 4 계열 소형 `gemma-4-E2B`(실측: `Gemma4ForConditionalGeneration`
+멀티모달, 텍스트측 128K, bf16 10.25GB). 대안 `HY-MT1.5-7B-FP8`(계보·기능).
 
-- **M1 검증 필수:** (a) vLLM 0.25.x가 Gemma4 아키텍처를 서빙하는지, (b) 단일
-  24GB에서 draft(FP8 2GB)와 공존 시 KV 여유(128K는 과하니 `--max-model-len`을
-  8K~32K로 제한). 안 되면 tier가 OpenAI 호환 뒤라 모델 교체로 대응.
-- D5의 `HY-MT1.5-7B-FP8`은 계보·기능 관점 대안으로 유지(GPU 2장 또는 교체 시).
+- **맥락 개선(TMC)은 논문 근거로 갈음한다.** 직전 N턴 이중언어 컨텍스트가 대명사·
+  격식·생략을 복원한다는 주장은 Pombal et al.(TACL 2026)에 근거한다 — 모델이 고정
+  안 됐으니 우리 자체 측정은 하지 않고, **데모는 "논문 방법으로 맥락 번역한다"고
+  주장**한다(over-claim 금지: 우리 측정 수치가 아니라 방법의 근거를 제시).
+- 모델을 하나로 고정하는 시점에 vLLM 서빙 여부·레이턴시·`--max-model-len`(128K는
+  과하니 8K~32K)만 확인한다. 지금은 설계 블로커가 아니다.
 
 ### D7. COMET ↔ vLLM 의존성 충돌 — venv 분리
 
@@ -167,3 +169,36 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
 - Beyond General Purpose MT: Designing for Appropriate User Trust — arXiv:2205.06920
 - Revisiting Round-Trip Translation for Quality Estimation — arXiv:2004.13937
 - QE4PE: Word-level Quality Estimation for Human Post-Editing — arXiv:2503.03044
+
+### D12. BE 하드닝 — open 항목을 결정으로 확정
+
+자체 점검에서 남겼던 항목들을 데모 기준으로 결정한다(과설계 없이).
+
+- **백프레셔/동시성 상한**: tier별 `asyncio.Semaphore(N)`로 게이트웨이→vLLM 동시
+  요청을 제한(N은 vLLM 최대 배치에 맞춰 설정, 기본 8). 초과분은 큐잉. WS 초벌은
+  연결당 single-flight로 이미 중복을 접으므로 폭주를 이중 방어. openai 클라이언트에
+  요청 타임아웃 설정.
+- **턴 멱등성**: `POST …/turns`에 클라이언트 생성 `idempotency_key`(확정 draft의
+  revision 기반 UUID). 세션 내 동일 키가 있으면 기존 턴 결과를 반환. 턴 행에 유니크
+  제약(session_id, idempotency_key).
+- **인증**: 데모는 무인증. `session_id`는 추측 불가한 UUIDv4로, 세션 스코프 접근의
+  capability 토큰 역할. 공개 배포 시 fastapi-standards §2(OAuth2/JWT)로 승격.
+- **취소→vLLM abort**: vLLM은 클라이언트 disconnect 시 생성을 abort하는 문서화된
+  동작에 의존한다(스트림 close로 유도). M1 배선 시 통합 테스트로 확인만, 설계
+  블로커 아님.
+- **컨텍스트 예산**: 최근 N턴 유지 + 토큰 예산 초과 시 **오래된 턴부터 절단**. 요약은
+  도입하지 않는다(데모 YAGNI). `ContextAssembler(max_turns, token_budget)`가 담당.
+- **방향 스왑 컨텍스트**: `ko⇄en` 스왑은 방향을 뒤집고 **활성 컨텍스트를 리셋**한다
+  (새 방향 = 새 대화 스레드). 이전 턴은 이력 조회로 남되 방향이 바뀐 컨텍스트로는
+  주입하지 않는다.
+
+### D13. 품질증명 장치 확정 — 주력/보조 구분, 정렬 hover는 deferred
+
+lay user 품질증명(D11)의 실현성·우선순위를 확정한다.
+
+- **주력(데모 필수)**: witness 언어 + 단어 QE 색상(CometKiwi 파생, M4) + 역번역 버튼.
+  모두 별도 정렬 모델 없이 된다.
+- **보조(deferred)**: 구 정렬 hover. 정렬은 이미 해결된 능력(awesome-align·SimAlign
+  등 표준 zero-shot 정렬)이라 실현성이 의문이 아니므로 **지금 실측하지 않는다**.
+  구현 시 서버측에서 (소스, 최종) 쌍으로 정렬을 뽑아 캐시. 없어도 주력 장치로 데모
+  성립. 우선순위 후순위.
