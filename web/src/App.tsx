@@ -48,7 +48,6 @@ export default function App() {
                   {m.translation}
                 </div>
                 {m.witness && <div className="wit">↳ 확인용 en · “{m.witness}”</div>}
-                {m.degraded && <span className="badge">간이(초벌) 결과</span>}
               </div>
             </div>
           ))}
