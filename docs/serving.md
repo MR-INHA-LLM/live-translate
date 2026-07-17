@@ -67,9 +67,12 @@ cp .env.example .env
 uv sync
 uv run uvicorn app.main:app --port 8000
 
-# Demo
-cd web && pnpm install && pnpm dev   # http://localhost:5173
+# Demo (채팅 FE) — Node 필요
+cd web && npm install && npm run dev   # http://localhost:5173
+# 게이트웨이 주소가 다르면 VITE_API_BASE=http://host:8000 로 지정
 ```
+
+FE 브라우저 스모크: `node web/e2e-smoke.mjs` (게이트웨이 :8000 + preview :5173 필요).
 
 ## Docker Compose 배포 (nginx 리버스 프록시)
 
