@@ -160,9 +160,10 @@ class PromptBuilder(Protocol):
                          ctx: Conversation) -> list[ChatMessage]: ...
 ```
 
-- **VllmEngine(TranslationEngine)** — OpenAI 호환 `/chat/completions` 스트림을
-  `TokenChunk`로 변환하는 **Adapter**. tier별 `base_url` 주입. 실패는
-  `UpstreamEngineError`로 감싼다.
+- **VllmEngine(TranslationEngine)** — 모델은 vLLM의 OpenAI 호환 서버로 뜨고, 이
+  어댑터가 그 API의 **클라이언트**다(게이트웨이는 모델을 직접 안 돌림). 공식 `openai`
+  async SDK(`AsyncOpenAI`)를 tier별 `base_url`에 물려 `/chat/completions` 스트림을
+  `TokenChunk`로 변환한다. 실패는 `UpstreamEngineError`로 감싼다.
 - **HyMtPromptBuilder / GemmaPromptBuilder(PromptBuilder)** — 프롬프트 규약이 계열별로
   다르다(HY-MT는 언어쌍별 중문/영문 지시 분기, D0). 계열 추가 = Strategy 추가로 끝,
   서비스 불변(OCP).
