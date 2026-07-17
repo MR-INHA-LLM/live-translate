@@ -28,10 +28,10 @@
 - **언어 선택기는 양방향** `[A] ⇄ [B]`(기본 `ko ⇄ en`). `⇄`로 방향 스왑.
 - **WitnessPanel은 조건부**: `tgt == 'en'`이면 숨김(중복), `ko⇄id`처럼 target을 못
   읽는 조합에서 표시.
-- **품질을 lay user에게 보이는 장치**(연구 근거, design.md §8.3.1): **주력** = witness
-  언어 · 단어 QE 색상(불확실 구간) · 역번역 검증 버튼(별도 정렬 모델 불필요). **보조·
-  deferred** = 구 정렬 hover(D13). 숫자 점수는 디버그 패널에만. 구문 트리·LLM 첨언은
-  안 씀(트리는 어순 비대응으로 무의미 — decisions.md).
+- **품질을 lay user에게 보이는 장치**(design.md §8.3.1, D13 — 기준은 설득력 있는
+  시각화, 값은 실제 계산): **센터피스** = 구 정렬 하이라이팅(소스↔번역 구 색 연결,
+  SimAlign로 턴당 1회 계산·캐시). **주력** = 단어 QE 색상 · witness 언어 · 역번역.
+  숫자 점수는 디버그 패널만. 구문 트리·LLM 첨언은 안 씀.
 
 ## 2. 컴포넌트 트리
 
@@ -44,6 +44,7 @@ flowchart TB
   Workspace --> InputPanel & TargetPanel & WitnessPanel
   Footer --> LatencyOverlay & ConversationLog
   TargetPanel --> RenderBlock1["draft(흐림)"] & RenderBlock2["final(선명)"]
+  RenderBlock2 --> AlignmentView["정렬 하이라이팅(hover)"] & QEColor["단어 QE 색상"]
 ```
 
 - **컨테이너/프리젠테이션 분리**: 통신·상태는 훅/스토어, 컴포넌트는 표시에 집중(SRP).

@@ -19,6 +19,15 @@ class TurnTokenEvent(BaseModel):
     delta: str
 
 
+class AlignmentSpan(BaseModel):
+    """소스 구 ↔ 번역 구 대응 (문자 오프셋). 정렬 하이라이팅용(D13)."""
+
+    src_start: int
+    src_end: int
+    tgt_start: int
+    tgt_end: int
+
+
 class TurnDoneEvent(BaseModel):
     """SSE `event: done`."""
 
@@ -27,6 +36,8 @@ class TurnDoneEvent(BaseModel):
     candidates_scored: int = 0
     degraded: bool = False
     latency_ms: dict[str, float] = {}
+    # 정렬 하이라이팅 스팬(SimAlign, 턴당 1회 계산). 없으면 빈 목록.
+    alignment: list[AlignmentSpan] = []
 
 
 class TurnErrorEvent(BaseModel):
