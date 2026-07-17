@@ -11,68 +11,91 @@
   상태는 React 훅. (데모 규모라 무거운 상태 라이브러리 불필요.)
 - E2E: Playwright(`webapp-testing`) — 시나리오를 회귀 픽스처로.
 
-## 1. 화면 구성
+## 1. 화면 구성 — 채팅 UI (기본)
+
+번역이 **대화 맥락에 의존**하므로(TMC, design.md §5) UI의 기본은 채팅이다. 서로 다른
+언어를 쓰는 두 사람의 대화를 중개(translation-mediated chat)하고, **각 메시지에 원문 +
+번역을 함께** 보여준다 — 양측 번역이 대화 흐름에 그대로 드러난다.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│ 모드 [시나리오 ▾ | 자유]   언어 [ ko ⇄ en ]   witness[en] 맥락[on]│  LanguageSwitcher
-├──────────────┬────────────────────────┬───────────────────────┤
-│ InputPanel   │ TargetPanel (primary)  │ WitnessPanel (opt)    │
-│ (ko 입력)     │ draft(흐림)/final(선명) │ draft/final (en)      │
-├──────────────┴────────────────────────┴───────────────────────┤
-│ LatencyOverlay  초벌 12ms · 최종 1.2s        (콜드·degraded 배지)│
-│ ConversationLog (턴별 원문·초벌·최종)                           │
-└───────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│  민수  ·  한국어 ⇄ Bahasa Indonesia  ·  맥락 ●              │  ChatHeader
+├────────────────────────────────────────────────────────────┤
+│  ┌─ 상대 (id) ───────────────────────────┐                  │
+│  │ Halo, headphone yang saya pesan…      │ ← 상대가 보낸 원문 │
+│  │ 안녕하세요, 지난주에 주문한 헤드폰이…   │ ← 내가 읽는 ko 번역│
+│  └───────────────────────────────────────┘                  │
+│                       ┌───────────── 나 (ko) ─────────────┐  │
+│              내가 친 ko │ 주문번호는 A-2231이에요            │  │
+│            상대에게 id │ Nomor pesanan saya adalah A-2231   │  │
+│            확인용 en  │ (My order number is A-2231)        │  │  witness
+│                       └────────────────────────────────────┘  │
+│                                              〔펼치기 ⌄〕      │  → 정렬·QE·역번역
+├────────────────────────────────────────────────────────────┤
+│  ┌ 그거 오늘 안에 처리해 주세요▏                    ┐ [전송] │  Composer
+│  └ 초벌 id: Tolong proses pesanan…  en: handle that ┘(흐림) │  DraftPreview
+└────────────────────────────────────────────────────────────┘
 ```
 
-- **언어 선택기는 양방향** `[A] ⇄ [B]`(기본 `ko ⇄ en`). `⇄`로 방향 스왑.
-- **WitnessPanel은 조건부**: `tgt == 'en'`이면 숨김(중복), `ko⇄id`처럼 target을 못
-  읽는 조합에서 표시.
-- **품질을 lay user에게 보이는 장치**(design.md §8.3.1, D13 — 기준은 설득력 있는
-  시각화, 값은 실제 계산): **센터피스** = 구 정렬 하이라이팅(소스↔번역 구 색 연결,
-  awesome-align 사전학습 모델로 턴당 1회 계산·캐시, ONNX면 의존성 충돌 없음).
-  **주력** = 단어 QE 색상 · witness 언어 · 역번역.
-  숫자 점수는 디버그 패널만. 구문 트리·LLM 첨언은 안 씀.
+- **나(ko) 말풍선**(오른쪽): 내가 친 ko + 상대에게 나간 id + **확인용 en(witness)**.
+- **상대(id) 말풍선**(왼쪽): 상대가 보낸 id + 내가 읽는 ko 번역.
+- **컴포저**(하단): ko 입력 중 초벌(id·en) **실시간 미리보기(흐림)** → 전송 시 맥락 반영
+  **최종 번역이 말풍선으로 확정**.
+- **맥락**: 대화 전체가 컨텍스트 → 각 최종 번역이 직전 턴 반영(`그거→주문` 복원).
+- **검증 도구는 말풍선 펼치기**로: 정렬 하이라이팅(hover)·단어 QE 색·역번역·witness.
+  기본 화면은 깔끔하게, 의심되면 펼쳐 확인(design.md §8.3.1, D13). 구문 트리·LLM 첨언 안 씀.
+- **양방향 선택기**(헤더): `[A] ⇄ [B]`(기본 `ko ⇄ en`), `⇄`로 방향 스왑. `tgt==en`이면
+  witness 줄 숨김(중복). **같은 언어를 고르면** 거부하지 않고 UI가 자연스럽게 유도
+  (전송 비활성 + "같은 언어예요" 힌트 — 서버는 거부 안 함, app §schemas).
 
 ## 2. 컴포넌트 트리
 
 ```mermaid
 flowchart TB
-  App --> Toolbar
-  App --> Workspace
-  App --> Footer
-  Toolbar --> ModeToggle & LanguageSwitcher & Toggles["witness/맥락/rerank"]
-  Workspace --> InputPanel & TargetPanel & WitnessPanel
-  Footer --> LatencyOverlay & ConversationLog
-  TargetPanel --> RenderBlock1["draft(흐림)"] & RenderBlock2["final(선명)"]
-  RenderBlock2 --> AlignmentView["정렬 하이라이팅(hover)"] & QEColor["단어 QE 색상"]
+  App --> ChatHeader & MessageList & Composer & StatusBar
+  ChatHeader --> LanguageSwitcher & ContextToggle
+  MessageList --> Bubble["MessageBubble (mine/theirs)"]
+  Bubble --> Original["원문"] & Translation["번역(draft→final)"] & Verify["VerifyPanel(펼치기)"]
+  Verify --> AlignmentView["정렬 하이라이팅(hover)"] & QEColor["단어 QE 색"] & BackTrans["역번역"] & Witness["witness(en)"]
+  Composer --> InputArea["ko 입력(IME·디바운스)"] & DraftPreview["초벌 미리보기(id·en, 흐림)"]
 ```
 
 - **컨테이너/프리젠테이션 분리**: 통신·상태는 훅/스토어, 컴포넌트는 표시에 집중(SRP).
+- **MessageBubble**이 원문+번역+검증을 캡슐화 — 양측(mine/theirs)이 같은 컴포넌트,
+  `side`로 정렬·구성만 다르게.
 
 ## 3. 상태
 
 ```typescript
-interface SessionState {
+interface Message {
+  id: string
+  side: 'mine' | 'theirs'          // 내가 보냄(ko→id) / 상대가 보냄(id→ko)
+  srcLang: string; tgtLang: string
+  source: string                   // 원문
+  final?: string                   // 확정 번역 (없으면 아직 처리 중)
+  witness?: string                 // 확인용 en (mine이고 tgt≠en일 때)
+  alignment?: AlignmentSpan[]      // 펼치기 시 사용 (turn done)
+  confidence?: ConfidenceSpan[]    // 단어 QE
+  latency?: LatencyInfo
+}
+interface ChatState {
   sessionId: string | null
   src: string; tgt: string; witness: string[]   // ko⇄en 기본
-  mode: 'scenario' | 'free'
   context: boolean; rerank: boolean
+  messages: Message[]              // 대화 = 컨텍스트
 }
-interface StreamState {
-  revisionId: number                    // 단조 증가
-  renderings: Record<string, {          // lang → {draft, final, committed}
-    draft: string; final?: string; committedPrefixLen: number
-  }>
-  latency: { draftTtft?: number; draftTotal?: number; finalTtft?: number; finalTotal?: number }
-  degraded: boolean; cold: boolean
+interface ComposerState {          // 입력 중(라이브)
+  revisionId: number               // 단조 증가
+  draft: Record<string, string>    // lang → 초벌 (id·en)
+  latency?: LatencyInfo; cold: boolean
 }
 ```
 
 렌더 규칙:
-- **최신 revision만 반영** — 응답의 `revision_id < 현재`면 버린다(flicker 방지, D3).
-- **tentative vs 확정** — draft는 흐리게, `final` 도착 후 선명. `committedPrefixLen>0`
-  (어순 유사 쌍)일 때만 접두어 확정 스타일.
+- **초벌(컴포저)** — 최신 revision만 반영(`revision_id<현재`면 버림, flicker 방지 D3),
+  흐리게 표시.
+- **최종(말풍선)** — 전송 시 `final` 확정, 선명. `degraded`면 "간이 결과" 배지.
+- 정렬·QE는 말풍선을 **펼칠 때만** 렌더(기본은 깔끔).
 
 ## 4. 통신 계층
 
@@ -107,7 +130,8 @@ design.md §4.1의 상태기를 FE에서 구현한다. 훅 `useDraftInput`.
 - **디바운스**: `debounce_ms`(기본 200) + 어절 경계에서만 발사.
 - **revision_id 단조 증가**: 발사마다 +1. 백스페이스로 소스가 직전과 같아지면
   재전송 생략(서버 결정성 캐시와 별개로 클라도 중복 억제).
-- **Enter**: 문장 확정 → WS `is_final` + `POST …/turns` 트리거.
+- **전송(Enter/버튼)**: 메시지 확정 → WS `is_final` + `POST …/turns` → 최종 번역이
+  말풍선으로 확정되고 컴포저 초벌 미리보기는 비워진다.
 
 ## 6. 언어 선택기 (양방향)
 
@@ -119,10 +143,11 @@ design.md §4.1의 상태기를 FE에서 구현한다. 훅 `useDraftInput`.
 
 ## 7. 데모 모드
 
-- **시나리오 모드**: `src/scenarios/*.ts`의 준비된 다중 턴 대화를 재생(대명사 `그거`,
-  주어 생략, 존댓말) → quality tier 개선이 witness에 드러남. 이 시나리오는 **E2E
-  픽스처와 동일 소스**(살아있는 명세, design.md §8.7).
-- **자유 모드**: 직접 타이핑 → 속도·IME·flicker 억제 체감.
+- **시나리오 모드**: `src/scenarios/*.ts`의 준비된 **양측 대화를 채팅으로 재생**(상대
+  메시지 자동 도착 + 내 답장). 대명사 `그거`·주어 생략·존댓말이 걸려 있어 맥락 tier
+  개선이 witness에 드러남. **E2E 픽스처와 동일 소스**(살아있는 명세, design.md §8.7).
+- **자유 모드**: 직접 타이핑(내 쪽) → 속도·IME·flicker 억제 체감. 상대 쪽은 프리셋
+  응답 또는 수동 입력.
 
 ## 8. 프로젝트 구조 (web/)
 
@@ -132,10 +157,10 @@ web/
 ├── src/
 │   ├── main.tsx, App.tsx
 │   ├── api/            # rest.ts · draftSocket.ts · turnStream.ts
-│   ├── store/          # session·stream 스토어
+│   ├── store/          # chat·composer 스토어
 │   ├── hooks/          # useDraftInput(IME·디바운스) · useDraftSocket · useTurnStream
-│   ├── components/     # Toolbar · LanguageSwitcher · InputPanel · TargetPanel · WitnessPanel · LatencyOverlay · ConversationLog
-│   ├── scenarios/      # 준비된 대화 = E2E 픽스처
+│   ├── components/     # ChatHeader · LanguageSwitcher · MessageList · MessageBubble · VerifyPanel(Alignment/QE/BackTrans) · Composer · DraftPreview · StatusBar
+│   ├── scenarios/      # 준비된 대화(채팅 replay) = E2E 픽스처
 │   └── types/          # API 스키마 타입
 └── tests/e2e/          # Playwright 시나리오
 ```

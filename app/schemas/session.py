@@ -58,10 +58,9 @@ class SessionConfig(ApiRequest):
     stability: StabilityConfig = Field(default_factory=StabilityConfig)
 
     @model_validator(mode="after")
-    def _validate_langs(self) -> SessionConfig:
-        """tgt≠src 강제, witness에서 src/tgt·중복 제거."""
-        if self.tgt_lang == self.src_lang:
-            raise ValueError("tgt_lang must differ from src_lang")
+    def _dedup_witness(self) -> SessionConfig:
+        """witness에서 src/tgt·중복 제거. tgt==src는 거부하지 않는다 — 사용자가
+        당황하지 않도록 UI/UX에서 처리(FE에서 같은 언어 선택을 자연스럽게 유도)."""
         exclude = {self.src_lang, self.tgt_lang}
         self.witness_langs = [w for w in dict.fromkeys(self.witness_langs) if w not in exclude]
         return self
