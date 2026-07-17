@@ -1,6 +1,6 @@
 # live-translate
 
-타이핑 중에는 경량 번역 모델이 즉시 초벌 번역을 스트리밍하고, 입력이 확정되면 LLM이 대화 맥락을 반영해 자연스럽게 재번역하는 **이중 파이프라인 텍스트 번역 시스템**.
+타이핑 중에는 경량 번역 모델이 즉시 초벌 번역을 스트리밍하고 입력이 확정되면 LLM이 대화 맥락을 반영해 자연스럽게 재번역하는 **이중 파이프라인 텍스트 번역 시스템**.
 
 - **Draft tier** — 저지연 초벌 번역. 타이핑 중 매 변경마다 갱신.
 - **Quality tier** — 확정 문장을 대화 맥락 기반으로 재번역. context-aware reranking(QAD) 선택 가능.
@@ -53,7 +53,7 @@
 
 **두 tier는 반드시 별도 vLLM 인스턴스.** 같은 엔진이면 초벌이 최종 뒤에 큐잉되어 저지연 목표를 못 맞춥니다. GPU 배치(단일/듀얼)는 [`docs/serving.md`](docs/serving.md).
 
-- **초벌 안정화 (1순위 난제)** — 타이핑마다 번역 전체가 바뀌는 flicker를 억제. 디바운스 · IME 조합 제거 · tentative 렌더 · revision 순서제어로 처리. 상세·실측 근거는 [`docs/design.md`](docs/design.md) §4.
+- **초벌 안정화** — 타이핑마다 번역 전체가 바뀌는 flicker를 억제. 디바운스 · IME 조합 제거 · tentative 렌더 · revision 순서제어로 처리. 상세·실측 근거는 [`docs/design.md`](docs/design.md) §4.
 - **최종 컨텍스트 (TMC)** — 직전 N턴의 이중언어 원문/번역을 프롬프트에 포함해 대명사·격식·생략을 복원. Pombal et al. (TACL 2026) 기반. 상세는 [`docs/design.md`](docs/design.md) §5.
 
 ---
@@ -87,7 +87,7 @@
 - 초벌은 greedy(`temperature=0`), `max_tokens` 타이트하게. 안정성 > 다양성.
 - **Graceful degradation** — quality tier 실패 시 초벌 결과를 최종으로 승격.
 
-> M0 실측에서 초벌은 목표를 크게 상회. 수치는 [`bench/RESULTS_M0.md`](bench/RESULTS_M0.md).
+> 초벌의 M0 실측 수치는 [`bench/RESULTS_M0.md`](bench/RESULTS_M0.md).
 
 ---
 
@@ -117,7 +117,7 @@ docs/    설계서 · 결정 이력 · 서빙 가이드
 
 ## 7. 데모
 
-데모는 기능 나열이 아니라 **하나의 논증**입니다 — 핵심 주장은 "quality tier가 지연을 정당화한다". 짧은 문장에선 draft==final이라 그냥은 안 드러나므로, **id를 모르는 사람도 witness 언어(en)로 개선을 읽게** 하는 것이 설계의 중심입니다. 상세 UX는 [`docs/design.md`](docs/design.md) §8.
+데모가 증명하려는 주장은 "quality tier가 지연을 정당화한다"입니다. 짧은 문장에선 draft==final이라 효과가 드러나지 않으므로, **id를 모르는 사용자도 witness 언어(en)로 개선을 읽게** 하는 것을 목표로 합니다. 상세 UX는 [`docs/design.md`](docs/design.md) §8.
 
 ---
 

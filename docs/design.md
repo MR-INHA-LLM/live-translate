@@ -4,14 +4,15 @@
 [README](../README.md), 결정 근거는 [`decisions.md`](decisions.md), 서빙은
 [`serving.md`](serving.md), 측정 원본은 [`../bench/RESULTS_M0.md`](../bench/RESULTS_M0.md).
 
-> **설계를 지배하는 실측 사실 (근거: decisions.md)**
-> - 초벌 추론 TTFT p50 **12.5ms** → 추론은 병목이 아니다. **디바운스(150~250ms)가
->   레이턴시 예산을 지배**하고, 다중 타겟 병렬 번역을 감당할 여유가 크다. (D4)
-> - ko(SOV)↔id(SVO) 접두어 생존율 **≈0%** → **목표문 접두어 확정(hold-k)은
->   flicker 해법이 아니다.** 전체 tentative 렌더 + revision 순서제어로 간다. (D3)
-> - temp=0 **완전 결정적** → 동일 소스는 동일 출력. 캐시·중복요청 제거 가능. (D3)
-> - 초벌 6방향 평균 **COMET 88.59**, `ko↔id` 직접 87.8~87.9 = `ko↔en`급. en은
->   신뢰 가능한 **witness(증인) 언어**로 쓸 수 있다. (D1·D2)
+> **설계 근거가 되는 실측 사실 (근거: decisions.md)**
+> - 초벌 추론 TTFT p50 **12.5ms** < 디바운스 150~250ms → 레이턴시 예산의 대부분은
+>   디바운스가 차지한다. 다중 타겟 병렬 번역을 추가할 여지가 있다. (D4)
+> - ko(SOV)↔id(SVO) 접두어 생존율 **≈0%** → 목표문 접두어 확정(hold-k)으로는 확정할
+>   접두어가 생기지 않는다. 전체 tentative 렌더 + revision 순서제어로 간다. (D3)
+> - temp=0 greedy는 결정적(측정: 동일 프롬프트 5/5 동일) → 동일 소스는 동일 출력.
+>   캐시·중복요청 제거 가능. (D3)
+> - 초벌 6방향 평균 **COMET 88.59**, `ko↔id` 직접 87.8~87.9로 `ko↔en`(87.1)과 비슷.
+>   en은 witness(증인) 언어로 쓸 수 있다. (D1·D2)
 
 ---
 
@@ -156,8 +157,8 @@ stateDiagram-v2
   Final --> [*]: /v1/turn 트리거
 ```
 
-- **IME 조합 제거:** `compositionupdate` 중인 자모(`안녕하세ㅇ`)는 절대 전송하지
-  않는다. `compositionend` 확정 문자열만 대상. (한글 기준 우선 테스트 — README §2.1)
+- **IME 조합 제거:** `compositionupdate` 중인 자모(`안녕하세ㅇ`)는 전송하지 않고,
+  `compositionend` 확정 문자열만 대상으로 한다. (한글 기준 우선 테스트 — README §2.1)
 - **디바운스:** `debounce_ms`(기본 200) + 어절 경계 도달 시에만 revision 발사.
   추론이 12ms이므로 이 값이 flicker↔반응성의 실질 튜닝 손잡이. (D4)
 - revision마다 `revision_id`를 단조 증가시켜 전송.
@@ -185,16 +186,16 @@ sequenceDiagram
   DR-->>FE: {revision_id:n, renderings:{id,en}, latency_ms}
 ```
 
-**핵심 규칙 (실측 근거)**
+**규칙 (실측 근거)**
 1. **다중 타겟 fan-out (D8):** `[tgt_lang] + witness_langs`를 `asyncio.gather`로 병렬
-   번역. 각 타겟은 프롬프트가 달라 KV 접두어는 분리되지만, 타이핑 리비전 간
+   번역. 각 타겟은 프롬프트가 달라 KV 접두어는 분리되지만 타이핑 리비전 간
    접두어 재사용은 타겟별로 유효 → prefix caching 이득 유지.
 2. **revision 순서 제어 (D3):** 응답이 역전 도착해도 `revision_id`가 현재 최신일
    때만 FE로 전달. 새 입력 도착 시 이전 task를 `cancel()` → vLLM은 클라이언트
    중단 시 생성을 abort하므로 GPU 낭비 없음.
 3. **결정성 캐시 (D3):** 정규화 소스가 직전과 동일하면(백스페이스 후 복원 등)
    재요청 없이 캐시 렌더 반환.
-4. **tentative 렌더 (D3):** 응답은 목표문 전체를 담고, FE는 **미확정 = 흐리게**
+4. **tentative 렌더 (D3):** 응답은 목표문 전체를 담고 FE는 **미확정 = 흐리게**
    렌더. `commit_prefix=false`가 기본. 어순 유사 쌍에서 켜면 응답에
    `committed_prefix_len`(타겟별)을 실어 보낸다.
 5. **greedy·타이트:** `temperature=0`, `max_tokens` 소스 길이에 비례한 상한.
@@ -241,8 +242,8 @@ quality tier 오류/타임아웃 시 해당 턴의 **primary target draft 결과
 
 ### 5.3 witness 언어(최종)
 비용 관리: **primary target만 quality tier**를 태우고 witness(en)는 draft 결과를
-유지(증인의 역할은 신뢰 신호이지 최상 품질이 아님). 설정으로 witness도 quality로
-올릴 수 있게 둔다.
+유지한다(witness는 개선 확인용이므로 quality tier까지 태우지 않음). 설정으로
+witness도 quality로 올릴 수 있게 둔다.
 
 ### 5.4 Quality 모델 교체 후보
 tier가 OpenAI 호환 뒤라 모델 교체 자유. 기준 `gemma-4-E2B`(D6) 외:
@@ -322,11 +323,11 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 | ① 빠르다 | 레이턴시 오버레이(실측 TTFT 12ms) | 쉬움 |
 | ② target을 몰라도 믿을 수 있다 | witness 언어(en) 동시 렌더 | 쉬움 |
 | ③ 지원 범위가 넓다 | `/v1/languages` 33종 | 쉬움 |
-| ④ **quality tier가 지연을 정당화한다** | **아래 8.3** | **어려움 — 데모의 승부처** |
+| ④ **quality tier가 지연을 정당화한다** | **아래 8.3** | **어려움** |
 
-④가 핵심이다. 짧은 문장은 draft==final이라 quality tier가 무의미해 보인다(README
-§7이 경고한 함정). 데모의 설계 전체가 **④를 id를 모르는 사람에게도 보이게** 하는 데
-집중한다.
+④가 증명하기 가장 어렵다. 짧은 문장은 draft==final이라 quality tier의 효과가 드러나지
+않는다(README §7이 지적한 함정). 데모 설계는 **④를 id를 모르는 사용자에게도 보이게**
+하는 데 초점을 둔다.
 
 ### 8.2 화면 레이아웃
 ```
@@ -343,13 +344,13 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 8.3 quality tier를 "보이게" 한다 (④ — 데모의 승부처)
+### 8.3 quality tier를 "보이게" 한다 (④)
 
-- **witness로 개선을 읽는다 (핵심 재설계):** witness-en을 primary(id)의 **draft와
-  final 양쪽**에 렌더한다. id를 모르는 사용자가 영어로 *개선 자체*를 읽는다 —
-  draft en `"handle that"` → final en `"process the shipment"`(`그거`가 맥락으로
-  복원). 즉 witness는 "id가 맞나"를 넘어 **맥락 tier가 무슨 일을 하는지**를 비-화자에게
-  전달하는 렌즈다. (COMET 87~90이라 en 신호는 정직하다 — D1)
+- **witness로 개선을 읽는다:** witness-en을 primary(id)의 **draft와 final 양쪽**에
+  렌더한다. id를 모르는 사용자가 영어로 *개선 자체*를 읽는다 — draft en
+  `"handle that"` → final en `"process the shipment"`(`그거`가 맥락으로 복원). witness는
+  "id가 맞나"를 넘어 **맥락 tier가 무슨 일을 하는지**를 비-화자에게 전달한다. (ko→en
+  COMET 87.1로 en 렌더의 신뢰 근거가 있음 — D1)
 - **counterfactual 토글(맥락 on/off):** 같은 문장을 맥락 없이/있이 나란히 →
   quality tier의 기여를 격리해 보여준다.
 - **"왜 바뀌었나" 주석:** draft↔final 차이에 언어학적 이유(대명사 지시·격식·주어
@@ -359,18 +360,18 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 
 ### 8.4 두 가지 모드
 - **시나리오 모드:** 준비된 다중 턴 대화(대명사 `그거`, 주어 생략, 존댓말)를 재생 →
-  ④가 반드시 드러난다. 시나리오는 `bench/eval_set.py`의 대화 프로브 재사용.
+  ④가 드러나도록 구성. 시나리오는 `bench/eval_set.py`의 대화 프로브 재사용.
 - **자유 모드:** 사용자가 직접 타이핑 → 속도·IME·견고성·flicker 억제를 체감.
   (여기선 draft==final일 수 있음을 감수 — 속도 증명용.)
 - (디버그) **역번역 검사:** primary(id)를 `id→en`으로 되번역해 witness와 비교 →
   id 출력을 직접 검증. 한 홉 추가라 옵션.
 
-### 8.5 정직한 신호 (신뢰의 일부)
-숨기지 않는다: **콜드 첫 요청**(TTFT 튐), **degradation**(quality 실패 → draft 승격
-배지), **레이턴시 p95**. 실패 모드를 우아하게 보여주는 것이 데모의 신뢰를 높인다.
+### 8.5 상태·한계 노출
+숨기지 않고 표시한다: **콜드 첫 요청**(TTFT 상승), **degradation**(quality 실패 →
+draft 승격 배지), **레이턴시 p95**. 실패 모드를 함께 보여준다.
 
 ### 8.6 지원 언어 노출
-언어 선택기는 `/v1/languages`로 채우고, 검증된 쌍엔 `COMET 87.9` 배지, 나머지엔
+언어 선택기는 `/v1/languages`로 채우고 검증된 쌍엔 `COMET 87.9` 배지, 나머지엔
 "지원(미측정)". "지원 언어 33종" 요약 뱃지 + 펼침 목록.
 
 ### 8.7 데모 시나리오 = 살아있는 명세
