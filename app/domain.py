@@ -50,6 +50,7 @@ class TokenChunk:
     """스트림에서 오는 토큰 조각. 첫 조각만 ttft_ms를 채운다."""
 
     text: str
+    logprob: float | None = None  # 모델 신뢰도(QE 색상 파생). logprobs=true 요청 시 채움.
     ttft_ms: float | None = None
 
 
