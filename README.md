@@ -15,6 +15,7 @@
 | [`docs/design.md`](docs/design.md) | **상세 설계서** — 데이터 모델 · 파이프라인 · 프로토콜 · 데모 UX (구현 기준) |
 | [`docs/user-scenario.md`](docs/user-scenario.md) | **사용자 시나리오** — 데모를 사용자 눈높이에서 걸어보기 |
 | [`docs/backend-architecture.md`](docs/backend-architecture.md) | **BE 아키텍처** — 레이어 · 포트/어댑터 · SOLID · 동시성 (게이트웨이 구조 기준) |
+| [`docs/frontend-architecture.md`](docs/frontend-architecture.md) | **FE 아키텍처** — 컴포넌트 · 상태 · WS/SSE 클라이언트 · 품질 표시 (데모 구조 기준) |
 | [`docs/decisions.md`](docs/decisions.md) | 설계 결정 이력 — 왜 이 설계인가 (모델 선정 근거 · 실측 결론) |
 | [`docs/serving.md`](docs/serving.md) | 서빙/운영 — GPU 배치 · 기동 · 환경 플래그 |
 | [`bench/RESULTS_M0.md`](bench/RESULTS_M0.md) | M0 실측 원본 데이터 |

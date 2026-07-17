@@ -85,9 +85,9 @@ class StabilityConfig(BaseModel):
     commit_prefix: bool = False       # D3: 어순 유사 쌍에서만 켠다. 기본 off.
 
 class SessionConfig(BaseModel):
-    src_lang: str
-    tgt_lang: str                     # primary target
-    witness_langs: list[str] = ["en"] # D8: 동시 렌더링할 증인 언어(데모)
+    src_lang: str = "ko"              # 기본 쌍 ko⇄en. UI 선택기는 양방향(⇄로 스왑)
+    tgt_lang: str = "en"              # primary target
+    witness_langs: list[str] = ["en"] # D8: 증인 언어. tgt==witness면 자동 억제(중복)
     domain: str = "general"
     formality: Literal["polite", "casual", "neutral"] = "neutral"
     draft_model: str = "hy-mt1.5-1.8b"
@@ -106,6 +106,11 @@ class Turn(BaseModel):
 
 `SessionConfig` 검증: `src_lang`·`tgt_lang`·`witness_langs`는 모두
 `LanguageCatalog`에 존재해야 하고 서로 달라야 한다(witness에 tgt/src 중복 시 제거).
+
+**양방향 선택기(UI 요구):** 언어는 `[A] ⇄ [B]` 쌍으로 고르고 `⇄`로 방향을 스왑한다
+(기본 `ko ⇄ en`). 스왑은 `src_lang`·`tgt_lang`을 뒤집어 세션에 반영. tgt가 en이면
+witness(en)는 중복이라 열이 숨는다 — witness 열은 `ko⇄id`처럼 target을 못 읽는
+조합에서 켜진다.
 
 ---
 
@@ -281,8 +286,9 @@ Body = `SessionConfig`. 응답 `{ "session_id": "..." }`. 생성 시 워밍업 �
   "latency_ms": { "ttft":12, "total":88 }
 }
 ```
-- `is_final:true` 수신 → 초벌 마무리 + 서버가 자동으로 최종 파이프라인을 큐잉(또는
-  FE가 명시적으로 `POST …/turns` 호출; 데모는 후자로 프롬프트/후보를 노출).
+- `is_final:true`는 **초벌만 마무리**(진행 중 draft 정리)한다. 최종 번역은 자동
+  트리거하지 않고 **FE가 `POST …/turns`로 명시 호출**한다(단일 경로 — 데모가
+  프롬프트/후보를 노출하고 rerank 여부를 싣기 위함).
 - **오류 처리:** stale revision은 조용히 drop. 업스트림 오류는
   `{ "revision_id":n, "error":"upstream_draft_error" }`.
 
@@ -341,13 +347,12 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 ### 8.2 화면 레이아웃
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ 모드 [시나리오 ▾ | 자유]  언어 [ko ▸ id]  witness [en]  맥락 [on]  │  ← /api/v1/languages
+│ 모드 [시나리오 ▾ | 자유]  언어 [ ko ⇄ id ]  witness [en]  맥락 [on] │  ← 양방향 선택기
 ├───────────────┬────────────────────────────┬─────────────────────┤
 │  입력 (ko)     │  PRIMARY  id               │  WITNESS  en        │
 │  그거 오늘…    │  draft:(흐림) hal itu…      │  draft: handle that │  ← 초벌(맥락 없음)
-│                │  final:      pengirimannya… │  final: the shipment│  ← 최종(맥락)
+│                │  final:      pengirimannya… │  final: the order   │  ← 최종(맥락)
 ├───────────────┴────────────────────────────┴─────────────────────┤
-│ 왜 바뀌었나: 대명사 '그거' → 이전 턴의 '배송'으로 복원 (맥락)      │  ← diff 주석
 │ 레이턴시  draft 12ms/88ms · final 340/1180ms   | 콜드·degraded 표시 │
 │ 대화 로그 (턴별 원문·초벌·최종)                                    │
 └──────────────────────────────────────────────────────────────────┘
@@ -357,15 +362,31 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 
 - **witness로 개선을 읽는다:** witness-en을 primary(id)의 **draft와 final 양쪽**에
   렌더한다. id를 모르는 사용자가 영어로 *개선 자체*를 읽는다 — draft en
-  `"handle that"` → final en `"process the shipment"`(`그거`가 맥락으로 복원). witness는
+  `"handle that"` → final en `"process the order"`(`그거`가 맥락으로 복원). witness는
   "id가 맞나"를 넘어 **맥락 tier가 무슨 일을 하는지**를 비-화자에게 전달한다. (ko→en
   COMET 87.1로 en 렌더의 신뢰 근거가 있음 — D1)
 - **counterfactual 토글(맥락 on/off):** 같은 문장을 맥락 없이/있이 나란히 →
-  quality tier의 기여를 격리해 보여준다.
-- **"왜 바뀌었나" 주석:** draft↔final 차이에 언어학적 이유(대명사 지시·격식·주어
-  생략 복원)를 태깅. 시나리오는 이 현상들이 걸리도록 설계.
+  quality tier의 기여를 격리해 보여준다. (개선은 witness의 draft↔final 대비로 드러남 —
+  LLM이 설명을 첨언하지 않는다. 시나리오가 대명사·격식·주어생략이 걸리도록 설계될 뿐.)
 - **확정/미확정 시각 구분:** 미확정 초벌은 흐리게, `is_final` 후 최종은 선명하게.
   `commit_prefix` on일 때만 접두어 확정 스타일.
+
+### 8.3.1 lay user에게 품질을 믿게 하는 장치 (연구 근거)
+
+일반 사용자는 벤치마크 점수(COMET/QE 수치)를 해석하지 못하고, 유창한 출력이면
+틀려도 믿는다(automation bias). 그래서 품질은 **숫자가 아니라 시각·상호작용**으로
+보여준다. MT UX 연구에서 검증된 패턴을 조합한다:
+
+| 장치 | 무엇을 보여주나 | 비고 |
+|---|---|---|
+| **구 정렬 hover** | 소스 구 hover → 타겟·witness의 대응 구 강조. 빠짐/환각 없이 커버됨을 눈으로 | CAT 툴 표준. 가장 직관적 |
+| **witness 언어(en)** | 못 읽는 타겟 대신 읽을 수 있는 언어의 독립 forward 번역 | 역번역보다 정직 |
+| **단어 QE 색상** | 모델이 불확실한 구간만 색(green/amber). 단일 점수보다 국소적·정직 | CometKiwi(M4)에서 파생 |
+| **역번역(id→ko) 버튼** | 사용자 언어로 즉석 검증(on-demand) | 신뢰↑지만 거짓확신 위험 → 보조·경고 병기 |
+| 숫자 COMET/QE | 전문가·디버그 패널에만 | lay엔 부적합 |
+
+**정직성 원칙**: 다 초록으로 칠하지 않는다. 불확실성을 드러내는 편이 거짓 신뢰보다
+낫다(§8.5와 일치). 근거·출처는 [`decisions.md`](decisions.md) D11.
 
 ### 8.4 두 가지 모드
 - **시나리오 모드:** 준비된 다중 턴 대화(대명사 `그거`, 주어 생략, 존댓말)를 재생 →
@@ -422,3 +443,10 @@ draft 승격 배지), **레이턴시 p95**. 실패 모드를 함께 보여준다
 - [ ] 컨텍스트 길이 증가 시 절단 vs 요약 정책.
 - [ ] rerank(CometKiwi)의 context-aware 변형 학습 여부(M4).
 - [ ] FLORES+ gated 재측정으로 README 원문 데이터셋 parity(gate 승인 후).
+
+**BE 미보강 (자체 점검에서 나온 갭)**
+- [ ] **취소→vLLM abort 가정 검증** — httpx 스트림 close가 실제로 vLLM 생성을 멈추는지 M1에서 확인.
+- [ ] **백프레셔/동시성 상한** — 다수 세션 시 draft 엔진 과부하 방지. 게이트웨이→vLLM 전역 동시 요청 캡·큐 바운드 미설계.
+- [ ] **턴 생성 멱등성** — `POST …/turns` 재시도 시 중복 턴 방지(idempotency key) 미설계.
+- [ ] **인증/인가** — 데모는 무인증 전제. 공개 배포 시 fastapi-standards §2(OAuth2/JWT) 필요.
+- [ ] **방향 스왑 시 컨텍스트** — ko⇄en 스왑 후 이전 방향 턴 이력을 컨텍스트로 쓸지 새로 시작할지 정책 미정(데모는 스왑=새 대화 방향으로 단순화 가능).

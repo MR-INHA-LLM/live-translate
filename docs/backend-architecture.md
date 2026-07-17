@@ -177,9 +177,11 @@ class PromptBuilder(Protocol):
 - **SqlSessionRepository(SQLAlchemy async + aiosqlite)** — 세션·턴 영속. 라우트를
   얇게, DB 연산은 Repository로(§4.2). ORM 모델은 `models/`, 스키마 변경은 Alembic
   (SQLite ALTER 제약은 `render_as_batch=True`). WAL + `busy_timeout`으로 동시 쓰기 대기.
-- **RenderingCache(Protocol) + InProcessRenderingCache** — 결정성 캐시(동일 정규화
-  소스 → 캐시된 렌더, D3). 세션별·휘발성이라 프로세스 내 bounded LRU면 충분. 미스
-  비용은 초벌 추론 12ms뿐(D4)이라 캐시는 GPU 중복 호출을 줄이는 효율 장치다.
+- **RenderingCache(Protocol) + InProcessRenderingCache** — 결정성 캐시(D3). 키는
+  `(draft_model, src_lang, tgt_lang, 정규화_소스)` — 결정성은 (모델, 프롬프트)에
+  묶이고 프롬프트가 언어쌍에 따라 갈리므로 키에 모델·쌍을 포함한다. 휘발성이라
+  프로세스 내 bounded LRU면 충분. 미스 비용은 초벌 추론 12ms뿐(D4)이라 캐시는 GPU
+  중복 호출을 줄이는 효율 장치다.
 - **라이브 세션 상태**는 별도 저장 없이 `DraftSessionCoordinator`가 프로세스 내
   `asyncio.Task`로 소유(§8).
 

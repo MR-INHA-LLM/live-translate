@@ -143,3 +143,27 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
   rate-limit)이 없다. "불필요한 패키지는 삭제"(Max 표준) + docker compose 단순화.
 - `RenderingCache`가 Protocol 뒤라, 다중 노드로 커질 때 `RedisRenderingCache` 구현을
   추가하는 것으로 승격(코드 불변). SQLite→Postgres(D9)와 동일 패턴.
+
+### D11. lay user에게 품질 전달 — 시각·상호작용 장치 (구문 트리 배제)
+
+일반 사용자는 벤치마크 점수를 해석하지 못하고 유창한 출력이면 틀려도 믿는다
+(automation bias). MT UX 연구를 조사해(아래 출처) 품질 전달을 **숫자가 아니라 시각·
+상호작용**으로 설계한다. 채택:
+- **구 정렬 hover**(소스↔타겟↔witness 대응 강조 — 커버리지를 눈으로), **witness 언어**,
+  **단어 수준 QE 색상**(불확실 구간만 — CometKiwi 파생), **역번역 검증 버튼**(보조).
+- 숫자 COMET/QE는 전문가·디버그 패널에만.
+- **정직성**: 불확실성을 드러낸다. 다 초록으로 칠하면 거짓 신뢰(연구가 automation
+  bias·"interpretability가 오히려 과신 유발"을 경고).
+
+**배제 — 구문(syntax) 트리로 품질 증명**: (a) ko(SOV)↔id/en(SVO)은 M0에서 접두어
+생존율 ≈0%(D3)로, 좋은 번역일수록 트리가 다르다 → 트리 유사도가 품질과 역행. (b)
+구문 기반 MT 메트릭은 신경망 메트릭(COMET/CometKiwi)으로 대체됨. (c) lay user에게
+파스 트리는 witness 텍스트보다 덜 직관적. 좁은 용도(타겟 파싱 가능성=약한 유창성
+프록시, under-the-hood 교육 패널)만 있고 품질 증명은 못 함.
+
+출처:
+- Translation in the Hands of Many: MT as a (Lay) User-Facing Technology — arXiv:2502.13780
+- User Strategies for Mistranslations in MT-Mediated Chat — CHI, ACM 10.1145/3531146.3534638
+- Beyond General Purpose MT: Designing for Appropriate User Trust — arXiv:2205.06920
+- Revisiting Round-Trip Translation for Quality Estimation — arXiv:2004.13937
+- QE4PE: Word-level Quality Estimation for Human Post-Editing — arXiv:2503.03044
