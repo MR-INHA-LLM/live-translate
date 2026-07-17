@@ -1,0 +1,50 @@
+# 배포 — 게이트웨이 + nginx(리버스 프록시). 기본은 호스트에 떠 있는 vLLM(:8001)에
+# 붙는다. 자체 완결(GPU) 배포는 `--profile gpu`로 vllm-draft까지 띄운다.
+services:
+  gateway:
+    build: .
+    environment:
+      DRAFT_URL: ${DRAFT_URL:-http://host.docker.internal:8001/v1}
+      QUALITY_URL: ${QUALITY_URL:-http://host.docker.internal:8001/v1}   # M1: quality는 draft로 degrade
+      DRAFT_MODEL: hy-mt1.5-1.8b
+      DB_URL: sqlite+aiosqlite:////data/app.db
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:18090"]'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - gateway-data:/data
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "18090:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateway
+
+  # 자체 완결 배포용 (GPU). `docker compose --profile gpu up`
+  # gateway의 DRAFT_URL/QUALITY_URL을 http://vllm-draft:8000/v1 로 바꿔 사용.
+  vllm-draft:
+    image: vllm/vllm-openai:latest
+    profiles: ["gpu"]
+    command: >
+      --model tencent/HY-MT1.5-1.8B-FP8 --served-model-name hy-mt1.5-1.8b
+      --enable-prefix-caching --max-model-len 4096 --gpu-memory-utilization 0.30 --port 8000
+    environment:
+      VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
+      VLLM_USE_FLASHINFER_SAMPLER: "0"
+      VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  gateway-data:
+  hf-cache:
