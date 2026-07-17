@@ -230,4 +230,14 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
   도메인 불일치(자막↔지원), HMM 위치 편향.
 - **판정**: 신뢰 데모엔 틀린 링크가 치명적(정렬 없음보다 나쁨). eflomal로 가려면 한국어
   형태소 토크나이저(mecab/khaiii)로 조사 분리 + 데이터 증량 필요(→ mecab 의존성 재발생).
-  → **정렬 센터피스는 SimAlign 유지**(별도 컨테이너), eflomal은 형태소 분석 붙일 때만 후보.
+  → eflomal은 형태소 분석 붙일 때만 후보.
+
+**awesome-align(사전학습 정렬 모델) 실측 — 정렬 센터피스 확정:** 직접 학습 대신
+정렬용으로 fine-tune된 `aneuraz/awesome-align-with-co`(mBERT 기반) 다운로드·검증
+(`bench/align_simalign.py <model>`).
+- **셋 중 최고 품질.** 데모 문장 내용어가 ko→en·ko→id 모두 정확 정렬. 특히 **`그거→that`을
+  맞춤** — eflomal·vanilla SimAlign이 놓친 대명사를 사전학습 모델은 잡음. 26~151ms(로드 19s).
+- **의존성 충돌 회피 경로**: 같은 모델의 ONNX 버전 `cstr/awesome-align-onnx`를
+  onnxruntime로 실행하면 torch/transformers 불필요 → vLLM·COMET과 충돌 없음.
+- **결정**: 정렬 센터피스 = **awesome-align(사전학습)**. 학습 불필요. 배포는 transformers
+  (별도 컨테이너, D7) 또는 ONNX(충돌 없음). eflomal(직접학습)·vanilla SimAlign보다 우수.

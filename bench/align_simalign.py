@@ -47,9 +47,11 @@ def show(aligner: SentenceAligner, tag: str, src: str, tgt_lang: str, tgt: str) 
 
 
 def main() -> None:
-    print("SimAlign 로딩 (mBERT, zero-shot)…")
+    import sys
+    model = sys.argv[1] if len(sys.argv) > 1 else "bert"
+    print(f"SimAlign 로딩 (model={model})…")
     t0 = time.perf_counter()
-    aligner = SentenceAligner(model="bert", token_type="bpe", matching_methods="i")
+    aligner = SentenceAligner(model=model, token_type="bpe", matching_methods="i")
     print(f"로드 {time.perf_counter()-t0:.1f}s")
     for tag, src, lang, tgt in PAIRS:
         show(aligner, tag, src, lang, tgt)
