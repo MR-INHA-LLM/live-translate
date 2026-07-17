@@ -219,3 +219,15 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
   버전이 충돌한다(측정 중 torch 2.13↔2.11 재설치 확인). 정렬은 **서빙과 별도 컨테이너**
   (reranker처럼)로 둔다. `pyproject`의 `bench` optional은 이 도구들을 나열만 하며
   동일 env 공존 불가.
+
+**eflomal(순수 통계) 실측 (`bench/align_eflomal.py`):** "AI 아님"으로 스켑틱을
+설득하려 통계 정렬을 검증. 학습데이터 OpenSubtitles v2018 ko-en(139만)·ko-id(59만)
+서브셋 15만쌍, IBM1+HMM+fertility, ~10초/30만쌍(신경망·transformers 0, 의존성 충돌 없음).
+- **결과: SimAlign보다 품질 낮음.** 내용어 일부는 맞지만(오후→afternoon, 회의를→rapat,
+  금요일로→jumat) 명확한 오류가 남음(회의를→move, 취소하고→menggantinya, 헤드폰이→lalu).
+  커버리지 71~79%지만 틀린 링크 혼재.
+- **원인**: 한국어 교착어(조사 붙은 어절 희소 → 통계 정렬 취약, SimAlign은 subword로 강함),
+  도메인 불일치(자막↔지원), HMM 위치 편향.
+- **판정**: 신뢰 데모엔 틀린 링크가 치명적(정렬 없음보다 나쁨). eflomal로 가려면 한국어
+  형태소 토크나이저(mecab/khaiii)로 조사 분리 + 데이터 증량 필요(→ mecab 의존성 재발생).
+  → **정렬 센터피스는 SimAlign 유지**(별도 컨테이너), eflomal은 형태소 분석 붙일 때만 후보.
