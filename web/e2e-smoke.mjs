@@ -2,7 +2,7 @@
 // 게이트웨이(:8000) + vite preview(:5173) + vLLM(:8001)가 떠 있어야 한다.
 import { chromium } from "@playwright/test";
 
-const URL = "http://localhost:5173";
+const URL = process.env.SMOKE_URL ?? "http://localhost:5173";
 const browser = await chromium.launch();
 const page = await browser.newPage();
 const errors = [];
