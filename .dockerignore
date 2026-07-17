@@ -1,0 +1,13 @@
+.venv/
+models/
+data/
+logs/
+bench/
+docs/
+tests/
+web/
+.git/
+__pycache__/
+*.pyc
+*.log
+.env

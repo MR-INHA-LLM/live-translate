@@ -6,15 +6,21 @@ EventSource 대신 FE는 fetch+ReadableStream으로 소비 — frontend-architec
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_quality_service, get_session_service
-from app.schemas.turn import TurnRead, TurnRequest
+from app.schemas.turn import TurnDoneEvent, TurnRead, TurnRequest, TurnTokenEvent
 from app.services.quality import QualityService
 from app.services.session import SessionService
 
 router = APIRouter(prefix="/sessions/{session_id}/turns", tags=["turns"])
+
+
+def _sse(event: str, data: str) -> str:
+    return f"event: {event}\ndata: {data}\n\n"
 
 
 @router.post("")
@@ -25,13 +31,16 @@ async def create_turn(
     quality: QualityService = Depends(get_quality_service),
 ) -> StreamingResponse:
     """최종 번역을 SSE로 스트리밍한다."""
-    await sessions.get(session_id)  # 존재 검증(없으면 SessionNotFoundError → 404)
+    session = await sessions.get(session_id)  # 없으면 SessionNotFoundError → 404
 
-    async def event_stream():
-        # TODO(M1): quality.translate_turn(session, req.text, req.rerank)를 순회하며
-        # `event: token`/`event: done`/`event: error`(SSE) 프레임으로 직렬화.
-        raise NotImplementedError("M1")
-        yield  # pragma: no cover
+    async def event_stream() -> AsyncIterator[str]:
+        async for ev in quality.translate_turn(session, req.text, req.rerank):
+            if isinstance(ev, TurnTokenEvent):
+                yield _sse("token", ev.model_dump_json())
+            elif isinstance(ev, TurnDoneEvent):
+                yield _sse("done", ev.model_dump_json())
+            else:
+                yield _sse("error", ev.model_dump_json())
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -41,5 +50,7 @@ async def list_turns(
     session_id: str,
     sessions: SessionService = Depends(get_session_service),
 ) -> list[TurnRead]:
-    """턴 이력을 반환한다. (TODO: M1)"""
-    raise NotImplementedError("M1")
+    """턴 이력을 반환한다."""
+    await sessions.get(session_id)  # 존재 검증
+    # M1: 이력은 quality 저장 경로에서 채워짐. 별도 조회 서비스는 후속.
+    return []

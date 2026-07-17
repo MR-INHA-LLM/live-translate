@@ -59,7 +59,7 @@ export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 
 - vLLM 0.25.x는 `--disable-log-requests` 플래그가 제거됨.
 
-## 게이트웨이 / 데모
+## 게이트웨이 / 데모 (로컬)
 
 ```bash
 # Gateway
@@ -70,3 +70,17 @@ uv run uvicorn app.main:app --port 8000
 # Demo
 cd web && pnpm install && pnpm dev   # http://localhost:5173
 ```
+
+## Docker Compose 배포 (nginx 리버스 프록시)
+
+`nginx(:18090) → gateway → vLLM` 경로. 기본은 호스트에 떠 있는 vLLM(:8001)에 붙는다.
+
+```bash
+docker compose up -d --build        # gateway + nginx (호스트 vLLM 사용)
+curl http://localhost:18090/health
+docker compose --profile gpu up -d  # vLLM(GPU)까지 자체완결 (DRAFT_URL을 vllm-draft로)
+```
+
+- **nginx**(`deploy/nginx.conf`): WS 업그레이드 + SSE(`proxy_buffering off`) + REST 프록시.
+- **gateway** 환경변수: `DRAFT_URL`·`QUALITY_URL`·`DRAFT_MODEL`·`DB_URL`·`CORS_ORIGINS`.
+- E2E: `uv run pytest tests/e2e`(게이트웨이 :18080 기동 → REST·WS·SSE 실번역 검증).

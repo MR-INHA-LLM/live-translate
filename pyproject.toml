@@ -22,4 +22,11 @@ bench = [
 ]
 
 [tool.uv]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "websockets>=16.1",
+]
 # vLLM installed into the same env in a later step (heavy)
