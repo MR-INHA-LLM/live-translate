@@ -1,0 +1,20 @@
+# Models & weights (multi-GB — never commit)
+models/
+*.safetensors
+*.gguf
+
+# Eval data & generated hypotheses (re-downloadable / re-generatable)
+data/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.python-version
+
+# Logs (all logs live under logs/ to keep the root clean)
+logs/
+*.log
+
+# Env
+.env

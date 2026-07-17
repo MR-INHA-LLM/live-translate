@@ -1,0 +1,25 @@
+[project]
+name = "live-translate"
+version = "0.0.1"
+description = "Dual-pipeline live text translation — M0 measurement harness"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "huggingface-hub>=0.27",
+    "hf-transfer>=0.1.8",
+    "requests>=2.32",
+    "fastapi>=0.139.2",
+    "uvicorn[standard]>=0.51.0",
+    "pydantic-settings>=2.14.2",
+    "sqlalchemy>=2.0.51",
+    "aiosqlite>=0.22.1",
+    "httpx>=0.28.1",
+    "openai>=2.46.0",
+]
+
+[project.optional-dependencies]
+bench = [
+    "simalign>=0.4",
+]
+
+[tool.uv]
+# vLLM installed into the same env in a later step (heavy)
