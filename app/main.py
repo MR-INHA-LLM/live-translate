@@ -21,6 +21,7 @@ from app.core.logging import setup_logging
 from app.domain import Tier
 from app.engines.openai import VllmEngine
 from app.engines.registry import ModelRegistry
+from app.models.orm import Base
 from app.prompts.gemma import GemmaPromptBuilder
 from app.prompts.hy_mt import HyMtPromptBuilder
 from app.repositories.cache import InProcessRenderingCache
@@ -46,6 +47,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # 저장(SQLite) + 캐시(인메모리)
     db_engine = create_async_engine(settings.db_url)
+    async with db_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     repo = SqlSessionRepository(session_factory)
     cache = InProcessRenderingCache(settings.cache_max_entries)

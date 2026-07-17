@@ -27,6 +27,12 @@ async def get_session(
     svc: SessionService = Depends(get_session_service),
 ) -> SessionRead:
     """세션을 조회한다."""
-    await svc.get(session_id)  # 존재 검증(없으면 404)
-    # TODO(M1): 도메인 Session → SessionRead(config) 매핑.
-    raise NotImplementedError("M1")
+    session = await svc.get(session_id)
+    config = SessionConfig(
+        src_lang=session.src_lang,
+        tgt_lang=session.tgt_lang,
+        witness_langs=session.witness_langs,
+        draft_model=session.draft_model,
+        quality_model=session.quality_model,
+    )
+    return SessionRead(session_id=session.id, config=config)
