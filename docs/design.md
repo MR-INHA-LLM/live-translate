@@ -18,6 +18,9 @@
 
 ## 1. 컴포넌트 아키텍처
 
+> 이 절은 컴포넌트의 **역할**을 개괄한다. 레이어·포트/어댑터·의존성 규칙 등
+> 게이트웨이 내부 구조(OOP/클린 아키텍처)는 [`backend-architecture.md`](backend-architecture.md).
+
 ```mermaid
 flowchart TB
   FE["Demo FE (Vite/React)"]
