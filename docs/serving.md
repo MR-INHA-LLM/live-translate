@@ -65,7 +65,7 @@ export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 # Gateway
 cp .env.example .env
 uv sync
-uvicorn app.main:app --port 8000
+uv run uvicorn app.main:app --port 8000
 
 # Demo
 cd web && pnpm install && pnpm dev   # http://localhost:5173

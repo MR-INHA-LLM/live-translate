@@ -103,17 +103,21 @@
 ## 재현 방법
 
 ```bash
-uv venv --python 3.12 && uv pip install "huggingface-hub[hf-transfer]" vllm "unbabel-comet>=2.2"
+uv add "huggingface-hub[hf-transfer]" vllm "unbabel-comet>=2.2"   # COMET·vLLM는 별도 env 권장(D7)
 hf download tencent/HY-MT1.5-1.8B --local-dir models/HY-MT1.5-1.8B
 bash bench/serve_draft.sh          # 백그라운드로 기동, :8001
-.venv/bin/python bench/quality_spotcheck.py
-.venv/bin/python bench/latency.py
-.venv/bin/python bench/prefix_stability.py
+uv run python bench/quality_spotcheck.py
+uv run python bench/latency.py
+uv run python bench/prefix_stability.py
 
 # FLORES-200 devtest COMET (정량). COMET 채점기는 HF 토큰 필요(gate 승인됨).
 curl -o data/flores200.tar.gz https://dl.fbaipublicfiles.com/nllb/flores200_dataset.tar.gz
 tar xzf data/flores200.tar.gz -C data ./flores200_dataset/devtest/{kor_Hang,eng_Latn,ind_Latn}.devtest
-HF_TOKEN=$HF_API_KEY .venv/bin/python bench/flores.py all    # translate + score
+HF_TOKEN=$HF_API_KEY uv run python bench/flores.py all    # translate + score
+
+# SQLite 저장 실현성 (D9)
+uv add "sqlalchemy>=2.0" aiosqlite
+uv run python bench/db_sqlite_probe.py
 ```
 
 ### WSL2 환경 필수 플래그 (실측 중 확인)

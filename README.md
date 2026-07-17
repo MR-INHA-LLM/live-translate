@@ -34,8 +34,8 @@
 ┌──────────────┐
 │  Demo (Web)  │
 └──────┬───────┘
-       │ WS /v1/stream            (초벌: partial text → draft)
-       │ SSE /v1/turn             (최종: 확정 문장 → quality)
+       │ WS  /api/v1/sessions/{id}/stream   (초벌: partial text → draft)
+       │ SSE /api/v1/sessions/{id}/turns    (최종: 확정 문장 → quality)
        ▼
 ┌──────────────────────────────────────────────┐
 │  Gateway (FastAPI, :8000)                    │
@@ -63,14 +63,14 @@
 
 | 엔드포인트 | 용도 |
 |---|---|
-| `POST /v1/sessions` | 세션 생성(언어쌍·도메인·격식·모델·rerank 설정) |
-| `GET /v1/languages` | 지원 언어 · 검증된 쌍 |
-| `WS /v1/stream` | 초벌 스트리밍(revision 단위, 다중 타겟 렌더) |
-| `POST /v1/turn` (SSE) | 최종 번역 스트리밍 |
-| `GET /v1/sessions/{id}/turns` | 턴별 원문/초벌/최종/레이턴시 이력 |
+| `POST /api/v1/sessions` | 세션 생성(언어쌍·도메인·격식·모델·rerank 설정) |
+| `GET /api/v1/languages` | 지원 언어 · 검증된 쌍 |
+| `WS /api/v1/sessions/{id}/stream` | 초벌 스트리밍(revision 단위, 다중 타겟 렌더) |
+| `POST /api/v1/sessions/{id}/turns` (SSE) | 최종 번역(턴 생성) 스트리밍 |
+| `GET /api/v1/sessions/{id}/turns` | 턴별 원문/초벌/최종/레이턴시 이력 |
 | `GET /health`, `GET /metrics` | 모델 로드 상태 · tier별 레이턴시 히스토그램 |
 
-> 요청/응답 스키마 · 메시지 포맷 · 에러 코드는 [`docs/design.md`](docs/design.md) §6.
+> RESTful 네이밍·프로젝트 구조는 `fastapi-standards` 준수. 요청/응답 스키마·메시지 포맷·에러 코드는 [`docs/design.md`](docs/design.md) §6, BE 구조는 [`docs/backend-architecture.md`](docs/backend-architecture.md).
 
 ---
 
@@ -99,7 +99,7 @@
 ```bash
 bash bench/serve_draft.sh          # draft tier (:8001)
 # quality tier (:8002) — docs/serving.md
-uv sync && uvicorn app.main:app --port 8000
+uv sync && uv run uvicorn app.main:app --port 8000
 cd web && pnpm install && pnpm dev # 데모
 ```
 

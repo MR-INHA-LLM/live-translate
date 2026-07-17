@@ -108,4 +108,38 @@ audio/vision config 포함, 텍스트측 `gemma4_text` 35층·**128K 컨텍스�
 target(id) + witness 언어(en)로 동시 번역**해 나란히 보여준다. en은 COMET 87~90으로
 신뢰 가능한 "증인". → 게이트웨이가 초벌 요청을 target 목록으로 fan-out(병렬)하고
 revision마다 `{lang: translation}` 다중 렌더를 반환. 초벌 TTFT 12ms·prefix caching
-여유(D4)로 N=2~3 타겟 병렬은 저비용. 지원 언어는 `GET /v1/languages`로 노출. (design.md §3, §8)
+여유(D4)로 N=2~3 타겟 병렬은 저비용. 지원 언어는 `GET /api/v1/languages`로 노출. (design.md §3, §8)
+
+### D9. 세션·턴 저장 = SQLite (Postgres는 스케일 승격 경로)
+
+전역 표준은 PostgreSQL이나, 이 프로젝트 단계엔 SQLite를 쓴다. `bench/db_sqlite_probe.py`
+실측(SQLAlchemy async + aiosqlite + WAL):
+
+| 시나리오 | 처리량 | 쓰기 p50/p95 | lock 에러 |
+|---|---|---|---|
+| 10 세션 동시 | 1,342 w/s | 0.7 / 21.7ms | 0 |
+| 50 세션 동시 | 1,372 w/s | 25.8 / 74.6ms | 0 |
+| 50 세션 + 동시읽기 | 476 w/s | 92 / 200ms | 0 |
+| 200 세션(현실 초과) + 읽기 | 487 w/s | 400 / 506ms | 0 |
+
+근거:
+- **전 시나리오 lock 에러 0** (WAL + busy_timeout). 실제 부하는 턴 확정 시에만 쓰기
+  (키스트로크마다 아님) — 활성 100세션이 5초마다 확정해도 ~20 w/s로 측정치의 25배 이하.
+- 턴 저장은 SSE 최종 경로 밖 → 사용자 대기와 무관.
+- 핫패스(초벌 렌더)는 인메모리 캐시(D10), 라이브 상태는 프로세스 내. DB는 저빈도 세션·턴만.
+- **`SessionRepository`가 Protocol 뒤라 DB 선택은 연결 URL 한 줄.** 다중 노드로 커지면
+  `sqlite+aiosqlite` → `postgresql+asyncpg` URL 교체로 승격, 코드 불변(포트/어댑터 이점).
+  SQLAlchemy·Alembic 동일 동작(SQLite ALTER 제약은 Alembic `render_as_batch=True`로 처리).
+
+### D10. Redis 제거 — 데모는 인메모리 캐시
+
+Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 라이브 세션 상태는
+`DraftSessionCoordinator`가 이미 프로세스 내 `asyncio.Task`로 소유(별도 저장 불필요).
+
+근거:
+- 캐시는 세션별·휘발성이고 미스 비용이 초벌 추론 12ms뿐(D4) → 공유 저장이 불필요.
+  캐시의 목적은 지연 절감보다 동일 소스 재요청의 GPU 중복 호출 방지(효율 장치).
+- 단일 노드 데모에서 Redis가 값을 하는 지점(다중 프로세스 캐시 공유·WS pub/sub·분산
+  rate-limit)이 없다. "불필요한 패키지는 삭제"(Max 표준) + docker compose 단순화.
+- `RenderingCache`가 Protocol 뒤라, 다중 노드로 커질 때 `RedisRenderingCache` 구현을
+  추가하는 것으로 승격(코드 불변). SQLite→Postgres(D9)와 동일 패턴.

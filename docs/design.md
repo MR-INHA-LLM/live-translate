@@ -26,7 +26,7 @@ flowchart TB
   FE["Demo FE (Vite/React)"]
   subgraph GW["Gateway (FastAPI :8000)"]
     LANG["LanguageCatalog<br/>지원 언어·검증 쌍"]
-    SESS["SessionStore (Redis)<br/>세션·대화이력·설정"]
+    SESS["SessionStore<br/>SQLite(영속)+인메모리 캐시"]
     DRAFT["DraftRouter<br/>디바운스·revision·abort·fan-out"]
     QUAL["QualityRouter<br/>TMC 컨텍스트 조립·degradation"]
     RER["Reranker (opt, M4)<br/>CometKiwi QAD"]
@@ -36,10 +36,10 @@ flowchart TB
   DVLLM["vLLM :8001<br/>HY-MT1.5-1.8B-FP8 (draft)"]
   QVLLM["vLLM :8002<br/>gemma-4-E2B (quality)"]
 
-  FE -- "WS /v1/stream (초벌)" --> DRAFT
-  FE -- "SSE /v1/turn (최종)" --> QUAL
-  FE -- "REST /v1/sessions, /v1/languages" --> SESS
-  FE -- "REST /v1/languages" --> LANG
+  FE -- "WS …/sessions/{id}/stream (초벌)" --> DRAFT
+  FE -- "SSE …/sessions/{id}/turns (최종)" --> QUAL
+  FE -- "REST /api/v1/sessions" --> SESS
+  FE -- "REST /api/v1/languages" --> LANG
   DRAFT --> ENG --> DVLLM
   QUAL --> ENG --> QVLLM
   QUAL -.-> RER
@@ -51,7 +51,7 @@ flowchart TB
 | 컴포넌트 | 책임 | 상태성 |
 |---|---|---|
 | `LanguageCatalog` | 지원 언어·언어명·검증된 쌍(+COMET) 제공 | 정적(설정) |
-| `SessionStore` | 세션 설정·대화 이력·턴 로그. TTL. | Redis |
+| `SessionStore` | 세션·턴 이력(SQLite 영속) + 결정성 캐시(인메모리 LRU) | SQLite + 인메모리 |
 | `DraftRouter` | WS 수신 → 디바운스·revision 순서·이전요청 abort·다중 타겟 fan-out | 세션별 in-memory task |
 | `QualityRouter` | 확정 문장 → TMC 컨텍스트 프롬프트 조립 → 스트리밍. 실패 시 degradation | stateless(세션 조회) |
 | `EngineClient` | tier별 vLLM(OpenAI 호환)로 async 스트리밍/취소 | 커넥션 풀 |
@@ -114,7 +114,7 @@ class Turn(BaseModel):
 draft 모델(HY-MT1.5)이 지원하는 **33개 언어(+방언/소수민족 변형)**를 카탈로그로
 제공한다. FE는 이 목록으로 언어 선택기와 "지원 언어" 패널을 그린다.
 
-### `GET /v1/languages`
+### `GET /api/v1/languages`
 ```jsonc
 {
   "languages": [
@@ -157,7 +157,7 @@ stateDiagram-v2
   Debounce --> Sending: debounce_ms 경과 & 어절 경계
   Sending --> Settled: DraftResponse 수신(tentative 렌더)
   Settled --> Final: Enter (문장 확정)
-  Final --> [*]: /v1/turn 트리거
+  Final --> [*]: POST …/turns 트리거
 ```
 
 - **IME 조합 제거:** `compositionupdate` 중인 자모(`안녕하세ㅇ`)는 전송하지 않고,
@@ -227,7 +227,7 @@ sequenceDiagram
   participant QR as QualityRouter
   participant EC as EngineClient
   participant Q as vLLM quality
-  FE->>QR: POST /v1/turn {text, rerank?}
+  FE->>QR: POST …/sessions/{id}/turns {text, rerank?}
   QR->>QR: 직전 N턴 이중언어 컨텍스트 조립 + domain/formality
   QR->>EC: (rerank off) stream 1회
   EC->>Q: /chat/completions (stream)
@@ -259,16 +259,19 @@ tier가 OpenAI 호환 뒤라 모델 교체 자유. 기준 `gemma-4-E2B`(D6) 외:
 
 ## 6. 프로토콜 계약
 
-### `POST /v1/sessions` → `201`
+> 네이밍·구조는 `fastapi-standards` 준수(`/api/v1`·복수 명사·계층). BE 구조는 [`backend-architecture.md`](backend-architecture.md).
+
+### `POST /api/v1/sessions` → `201`
 Body = `SessionConfig`. 응답 `{ "session_id": "..." }`. 생성 시 워밍업 수행.
 
-### `GET /v1/languages` → `200`
+### `GET /api/v1/languages` → `200`
 §3 참조.
 
-### `WS /v1/stream` — 초벌
+### `WS /api/v1/sessions/{session_id}/stream` — 초벌
+세션은 경로에 있으므로 메시지 body에 `session_id`를 넣지 않는다.
 ```jsonc
 // client → server
-{ "session_id":"…", "revision_id":17, "partial_text":"내일 회의를 오후로", "is_final":false }
+{ "revision_id":17, "partial_text":"내일 회의를 오후로", "is_final":false }
 
 // server → client  (revision마다; 다중 렌더)
 {
@@ -279,14 +282,15 @@ Body = `SessionConfig`. 응답 `{ "session_id": "..." }`. 생성 시 워밍업 �
 }
 ```
 - `is_final:true` 수신 → 초벌 마무리 + 서버가 자동으로 최종 파이프라인을 큐잉(또는
-  FE가 명시적으로 `/v1/turn` 호출; 데모는 후자로 프롬프트/후보를 노출).
+  FE가 명시적으로 `POST …/turns` 호출; 데모는 후자로 프롬프트/후보를 노출).
 - **오류 처리:** stale revision은 조용히 drop. 업스트림 오류는
   `{ "revision_id":n, "error":"upstream_draft_error" }`.
 
-### `POST /v1/turn` (SSE) — 최종
+### `POST /api/v1/sessions/{session_id}/turns` (SSE) — 최종
+턴 생성이 곧 최종 번역 트리거. 응답은 `text/event-stream`.
 ```jsonc
 // request
-{ "session_id":"…", "text":"내일 회의를 오후로 옮겨도 될까요?", "rerank":true }
+{ "text":"내일 회의를 오후로 옮겨도 될까요?", "rerank":true }
 // events
 event: token  data: {"delta":"Bisa"}
 event: done   data: {"turn_id":5,"translation":"…","candidates_scored":4,
@@ -294,8 +298,10 @@ event: done   data: {"turn_id":5,"translation":"…","candidates_scored":4,
 event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 ```
 
-### `GET /v1/sessions/{id}/turns` → 턴별 원문/초벌/최종/레이턴시 이력
+### `GET /api/v1/sessions/{session_id}/turns` → 턴별 원문/초벌/최종/레이턴시 이력
 ### `GET /health` → tier별 모델 로드 상태 · `GET /metrics` → §9
+
+에러 응답은 `ErrorResponse { detail, error_code }` (fastapi-standards §3.2).
 
 **에러 코드**: `session_not_found`(404) · `unsupported_language`(422) ·
 `stale_revision`(silent) · `upstream_draft_error` · `upstream_quality_error`(→degrade) · `rate_limited`(429).
@@ -325,7 +331,7 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 |---|---|---|
 | ① 빠르다 | 레이턴시 오버레이(실측 TTFT 12ms) | 쉬움 |
 | ② target을 몰라도 믿을 수 있다 | witness 언어(en) 동시 렌더 | 쉬움 |
-| ③ 지원 범위가 넓다 | `/v1/languages` 33종 | 쉬움 |
+| ③ 지원 범위가 넓다 | `/api/v1/languages` 33종 | 쉬움 |
 | ④ **quality tier가 지연을 정당화한다** | **아래 8.3** | **어려움** |
 
 ④가 증명하기 가장 어렵다. 짧은 문장은 draft==final이라 quality tier의 효과가 드러나지
@@ -335,7 +341,7 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 ### 8.2 화면 레이아웃
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ 모드 [시나리오 ▾ | 자유]  언어 [ko ▸ id]  witness [en]  맥락 [on]  │  ← /v1/languages
+│ 모드 [시나리오 ▾ | 자유]  언어 [ko ▸ id]  witness [en]  맥락 [on]  │  ← /api/v1/languages
 ├───────────────┬────────────────────────────┬─────────────────────┤
 │  입력 (ko)     │  PRIMARY  id               │  WITNESS  en        │
 │  그거 오늘…    │  draft:(흐림) hal itu…      │  draft: handle that │  ← 초벌(맥락 없음)
@@ -374,7 +380,7 @@ event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 draft 승격 배지), **레이턴시 p95**. 실패 모드를 함께 보여준다.
 
 ### 8.6 지원 언어 노출
-언어 선택기는 `/v1/languages`로 채우고 검증된 쌍엔 `COMET 87.9` 배지, 나머지엔
+언어 선택기는 `/api/v1/languages`로 채우고 검증된 쌍엔 `COMET 87.9` 배지, 나머지엔
 "지원(미측정)". "지원 언어 33종" 요약 뱃지 + 펼침 목록.
 
 ### 8.7 데모 시나리오 = 살아있는 명세
@@ -403,7 +409,8 @@ draft 승격 배지), **레이턴시 p95**. 실패 모드를 함께 보여준다
   quality 기준 모델 `gemma-4-E2B`(멀티모달 128K; `--max-model-len` 8K~32K 제한 권장).
 - **venv 분리 (D7):** COMET(transformers v4)와 vLLM(v5)은 의존성 충돌 → 별도
   환경/컨테이너. reranker(CometKiwi, M4)는 quality 서버와 다른 컨테이너.
-- 인프라는 Docker Compose로 코드화(게이트웨이·draft vLLM·quality vLLM·redis·nginx).
+- 인프라는 Docker Compose로 코드화(게이트웨이·draft vLLM·quality vLLM·nginx).
+  Redis는 데모에 불필요(D10) — 다중 노드 스케일 시 캐시 어댑터 교체로 추가.
 
 ---
 
