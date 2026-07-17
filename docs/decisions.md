@@ -241,3 +241,23 @@ Redis를 빼고 결정성 캐시(D3)를 프로세스 내 bounded LRU로 둔다. 
   onnxruntime로 실행하면 torch/transformers 불필요 → vLLM·COMET과 충돌 없음.
 - **결정**: 정렬 센터피스 = **awesome-align(사전학습)**. 학습 불필요. 배포는 transformers
   (별도 컨테이너, D7) 또는 ONNX(충돌 없음). eflomal(직접학습)·vanilla SimAlign보다 우수.
+
+### D14. 대화 저장소(conversations/messages) = 번역 파이프라인과 분리된 뷰 모델
+
+FE 좌측 패널을 "번역 세션 저장소"로 만들며(대화 목록·클릭 복원), 저장 계층을
+**엔진용 `sessions`/`turns`와 분리**한다.
+
+- **왜 분리했나**: `sessions`/`turns`는 번역 스트리밍(초벌 WS·최종 SSE·컨텍스트 조립)용이고,
+  한 대화는 방향이 다른 **두 엔진 세션**(운영자 src→tgt, 고객 tgt→src)으로 구성된다.
+  이를 하나의 사용자 대화로 되돌리려면 순서·측면(mine/theirs)을 가진 별도 뷰가 필요하다.
+  엔진 세션 모델을 양방향으로 바꾸는 대규모 리팩터 대신, **UI가 렌더한 최종 메시지를 그대로
+  담는 append-only 뷰 모델**(`conversations` + `messages`)을 추가한다(additive, 저위험).
+- **스키마**: `conversations`(id·src·tgt·witness·title·created_at) + `messages`(seq·side·
+  source·translation·witness·created_at). title=첫 메시지 원문(60자). 목록은 마지막 메시지
+  시각 desc. `create_all`로 추가 생성(기존 테이블 불변, 마이그레이션 불필요).
+- **FE 흐름**: 첫 메시지에서 대화 **지연 생성** → 이후 append. 클릭 시 상세를 받아 언어쌍
+  복원(엔진 세션 재생성 트리거) + 메시지 복원. "새 대화"·스왑은 대화 컨텍스트 초기화.
+- **알려진 한계**: 저장된 대화를 다시 열어 이어가면 **엔진 컨텍스트는 새로 시작**한다(엔진
+  세션은 신규). 이력 열람·재개 UX가 목표이므로 수용. 완전한 문맥 승계는 세션 시드가 필요(후속).
+- **의도적 중복**: `messages`는 `turns`와 데이터가 겹치나 목적이 다르다(사용자 이력 뷰 vs
+  엔진 컨텍스트 소스). 이벤트 로그↔뷰 모델 분리로 보고 drift로 취급하지 않는다.

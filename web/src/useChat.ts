@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  addMessage,
+  createConversation,
   createSession,
+  deleteConversation,
+  getConversation,
   getLanguages,
+  listConversations,
   openDraftSocket,
   streamTurn,
+  type ConversationSummary,
   type DraftResponse,
   type LanguageCatalog,
 } from "./api";
@@ -34,12 +40,16 @@ export function useChat() {
   const [latency, setLatency] = useState<DraftResponse["latency"] | null>(null);
   const [sending, setSending] = useState(false);
   const [custSending, setCustSending] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeConvId, setActiveConvId] = useState<string | null>(null);
 
   const ws = useRef<WebSocket | null>(null);
   const revision = useRef(0);
   const latestRev = useRef(0);
   const composing = useRef(false);
   const debounce = useRef<number | undefined>(undefined);
+  // 대화 id는 저장 사이 즉시 참조가 필요해 ref를 원본으로, state는 목록 하이라이트용.
+  const convId = useRef<string | null>(null);
 
   // 카탈로그 로드 → 세션 생성 → WS 연결 (언어쌍 바뀌면 재생성)
   useEffect(() => {
@@ -74,6 +84,29 @@ export function useChat() {
       ws.current = null;
     };
   }, [src, tgt]);
+
+  // 대화 목록(저장소) 로드 — 마운트 시 1회.
+  const refreshList = useCallback(async () => {
+    setConversations(await listConversations());
+  }, []);
+  useEffect(() => {
+    refreshList().catch(() => {});
+  }, [refreshList]);
+
+  // 확정 메시지를 대화에 영속(첫 메시지에서 대화를 지연 생성).
+  const persistMessage = useCallback(
+    async (msg: { side: "mine" | "theirs"; source: string; translation: string; witness: string | null }) => {
+      let id = convId.current;
+      if (!id) {
+        id = await createConversation({ src_lang: src, tgt_lang: tgt, witness_lang: witnessLang });
+        convId.current = id;
+        setActiveConvId(id);
+      }
+      await addMessage(id, msg);
+      await refreshList();
+    },
+    [src, tgt, witnessLang, refreshList],
+  );
 
   // 초벌 전송은 입력 핸들러에서 명시적으로 트리거한다(useEffect[text] 의존 X).
   // 한글 IME: 조합 중 onChange가 값을 미리 바꿔 compositionend에서 같은 값이 되면
@@ -115,29 +148,28 @@ export function useChat() {
   const send = useCallback(async () => {
     const source = text.trim();
     if (!source || !sessionId || sending) return;
-    const witness = draft[witnessLang];
+    const witness = tgt === witnessLang ? undefined : draft[witnessLang];
     setSending(true);
     setText("");
     setDraft({});
     try {
+      let translation = "";
       await streamTurn(sessionId, source, {
         onDone: (done) => {
+          translation = done.translation;
           setMessages((m) => [
             ...m,
-            {
-              id: `m-${done.turn_id}-${Date.now()}`,
-              side: "mine",
-              source,
-              translation: done.translation,
-              witness: tgt === witnessLang ? undefined : witness,
-            },
+            { id: `m-${done.turn_id}-${Date.now()}`, side: "mine", source, translation, witness },
           ]);
         },
       });
+      if (translation) {
+        await persistMessage({ side: "mine", source, translation, witness: witness ?? null });
+      }
     } finally {
       setSending(false);
     }
-  }, [text, sessionId, sending, draft, tgt, witnessLang]);
+  }, [text, sessionId, sending, draft, tgt, witnessLang, persistMessage]);
 
   const sendFromCustomer = useCallback(async () => {
     const source = custText.trim();
@@ -145,29 +177,80 @@ export function useChat() {
     setCustSending(true);
     setCustText("");
     try {
+      let translation = "";
       await streamTurn(revSessionId, source, {
         onDone: (done) => {
+          translation = done.translation; // 운영자 언어(src)로 번역
           setMessages((m) => [
             ...m,
             {
               id: `c-${done.turn_id}-${Date.now()}`,
               side: "theirs",
               source, // 고객이 입력한 원문(tgt 언어)
-              translation: done.translation, // 운영자 언어(src)로 번역
+              translation,
             },
           ]);
         },
       });
+      if (translation) {
+        await persistMessage({ side: "theirs", source, translation, witness: null });
+      }
     } finally {
       setCustSending(false);
     }
-  }, [custText, revSessionId, custSending]);
+  }, [custText, revSessionId, custSending, persistMessage]);
+
+  const resetConversation = useCallback(() => {
+    convId.current = null;
+    setActiveConvId(null);
+    setMessages([]);
+    setText("");
+    setCustText("");
+    setDraft({});
+  }, []);
+
+  const newConversation = useCallback(() => {
+    resetConversation();
+  }, [resetConversation]);
+
+  // 저장된 대화 열기 — 언어쌍 복원(세션 재생성 트리거) + 메시지 복원.
+  const loadConversation = useCallback(
+    async (id: string) => {
+      const detail = await getConversation(id);
+      convId.current = id;
+      setActiveConvId(id);
+      setText("");
+      setCustText("");
+      setDraft({});
+      setMessages(
+        detail.messages.map((m, i) => ({
+          id: `s-${id}-${m.seq}-${i}`,
+          side: m.side,
+          source: m.source,
+          translation: m.translation,
+          witness: m.witness ?? undefined,
+        })),
+      );
+      setSrc(detail.src_lang);
+      setTgt(detail.tgt_lang);
+    },
+    [],
+  );
+
+  const removeConversation = useCallback(
+    async (id: string) => {
+      await deleteConversation(id);
+      if (convId.current === id) resetConversation();
+      await refreshList();
+    },
+    [resetConversation, refreshList],
+  );
 
   const swap = useCallback(() => {
-    setMessages([]);
+    resetConversation();
     setSrc(tgt);
     setTgt(src);
-  }, [src, tgt]);
+  }, [src, tgt, resetConversation]);
 
   const nameOf = useCallback(
     (code: string) => catalog?.languages.find((l) => l.code === code)?.name_native ?? code,
@@ -178,6 +261,7 @@ export function useChat() {
     catalog, sessionId, revSessionId, src, tgt, setTgt, swap, witnessLang, nameOf,
     messages, text, onInput, draft, latency, sending, send,
     custText, setCustText, custSending, sendFromCustomer,
+    conversations, activeConvId, loadConversation, newConversation, removeConversation,
     onCompositionStart, onCompositionEnd,
   };
 }

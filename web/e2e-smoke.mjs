@@ -25,8 +25,8 @@ async function imeType(text) {
 try {
   await page.goto(URL, { waitUntil: "networkidle" });
 
-  // 3분할 존재
-  for (const sel of [".col.side", ".col.work", ".col.customer"]) {
+  // 3분할 존재 (좌: 세션 저장소, 중앙: 작업대, 우: 고객 화면)
+  for (const sel of [".col.store", ".col.work", ".col.customer"]) {
     await page.waitForSelector(sel, { timeout: 15000 });
   }
   await page.waitForSelector("textarea:not([disabled])", { timeout: 20000 });
@@ -64,12 +64,43 @@ try {
     ?.replace(/^→ \w+/, "").trim();
   console.log("고객→운영자 역번역:", inbound);
 
+  // 세션 저장소: 방금 대화가 좌측 목록에 저장되고, 새 대화→복원이 되는지
+  await page.waitForSelector(".convlist .convitem", { timeout: 15000 });
+  const convCount = await page.locator(".convlist .convitem").count();
+  await page.click(".newconv"); // 새 대화 → 작업대 비움
+  await page.waitForFunction(
+    () => document.querySelectorAll(".work .row").length === 0,
+    null,
+    { timeout: 5000 },
+  );
+  await page.click(".convlist .convitem"); // 저장된 대화 클릭 → 메시지 복원
+  await page.waitForFunction(
+    () => document.querySelectorAll(".work .row").length >= 2,
+    null,
+    { timeout: 15000 },
+  );
+  const restored = await page.locator(".work .row").count();
+  console.log(`세션 저장소: ${convCount}개 대화 · 복원된 메시지 ${restored}개`);
+
+  // 세션 삭제: 첫 항목 삭제 → 목록 개수 감소
+  await page.locator(".convlist .convitem").first().locator(".convdel").click();
+  await page.waitForFunction(
+    (n) => document.querySelectorAll(".convlist .convitem").length < n,
+    convCount,
+    { timeout: 10000 },
+  );
+  const afterDel = await page.locator(".convlist .convitem").count();
+  console.log(`삭제 후 대화: ${afterDel}개`);
+  if (afterDel >= convCount) throw new Error("세션 삭제 미동작");
+
   if (!draft || draft.length < 5) throw new Error("IME 초벌이 안 뜸 (버그 미수정)");
   if (!trans || trans.length < 5) throw new Error("작업대 번역 없음");
   if (!cust || cust.length < 5) throw new Error("고객 화면 미반영");
   if (!inbound || inbound.length < 5) throw new Error("고객 입력 역번역 미동작");
+  if (convCount < 1) throw new Error("대화가 저장소에 안 쌓임");
+  if (restored < 2) throw new Error("저장된 대화 복원 실패");
   if (errors.length) throw new Error("콘솔 에러: " + errors.join(" | "));
-  console.log("\nSMOKE PASS ✅  3분할 + IME 초벌 + 양방향(운영자↔고객) 번역");
+  console.log("\nSMOKE PASS ✅  세션 저장소 + IME 초벌 + 양방향 번역 + 복원");
   await browser.close();
 } catch (e) {
   console.error("SMOKE FAIL ❌", e.message);

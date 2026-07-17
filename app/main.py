@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.errors import register_exception_handlers
-from app.api.v1 import languages, sessions, stream, turns
+from app.api.v1 import conversations, languages, sessions, stream, turns
 from app.config import Settings
 from app.container import Container
 from app.core.logging import setup_logging
@@ -25,8 +25,9 @@ from app.models.orm import Base
 from app.prompts.gemma import GemmaPromptBuilder
 from app.prompts.hy_mt import HyMtPromptBuilder
 from app.repositories.cache import InProcessRenderingCache
-from app.repositories.sql import SqlSessionRepository
+from app.repositories.sql import SqlConversationRepository, SqlSessionRepository
 from app.services.context import ContextAssembler
+from app.services.conversation import ConversationService
 from app.services.draft import DraftService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await conn.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     repo = SqlSessionRepository(session_factory)
+    conversation_repo = SqlConversationRepository(session_factory)
     cache = InProcessRenderingCache(settings.cache_max_entries)
 
     # 서비스
@@ -59,10 +61,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.container = Container(
         registry=registry,
         session_repo=repo,
+        conversation_repo=conversation_repo,
         cache=cache,
         draft_service=DraftService(registry, cache),
         quality_service=QualityService(registry, repo, context),
         session_service=SessionService(repo, languages_svc),
+        conversation_service=ConversationService(conversation_repo),
         language_service=languages_svc,
     )
     try:
@@ -87,6 +91,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(sessions.router, prefix="/api/v1")
+    app.include_router(conversations.router, prefix="/api/v1")
     app.include_router(languages.router, prefix="/api/v1")
     app.include_router(turns.router, prefix="/api/v1")
     app.include_router(stream.router, prefix="/api/v1")

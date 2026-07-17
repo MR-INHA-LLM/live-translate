@@ -31,6 +31,46 @@ async def test_languages_catalog(server: str) -> None:
         assert any(p["src"] == "ko" and p["tgt"] == "id" and p["comet"] for p in data["validated_pairs"])
 
 
+async def test_conversation_store_crud(server: str) -> None:
+    """대화 저장소: 생성→메시지 추가→목록→복원→404. (vLLM 불필요, 순수 DB)"""
+    async with httpx.AsyncClient(base_url=server, timeout=30) as c:
+        r = await c.post("/api/v1/conversations",
+                         json={"src_lang": "ko", "tgt_lang": "en", "witness_lang": "en"})
+        assert r.status_code == 201
+        cid = r.json()["conversation_id"]
+
+        # 양측 메시지 추가 — seq 자동 부여
+        r = await c.post(f"/api/v1/conversations/{cid}/messages",
+                         json={"side": "mine", "source": "안녕하세요", "translation": "Hello"})
+        assert r.status_code == 201 and r.json()["seq"] == 0
+        r = await c.post(f"/api/v1/conversations/{cid}/messages",
+                         json={"side": "theirs", "source": "Can you help?",
+                               "translation": "도와주실 수 있나요?"})
+        assert r.status_code == 201 and r.json()["seq"] == 1
+
+        # 목록: 제목=첫 메시지, 카운트=2
+        r = await c.get("/api/v1/conversations")
+        assert r.status_code == 200
+        mine = next(x for x in r.json() if x["conversation_id"] == cid)
+        assert mine["message_count"] == 2 and mine["title"] == "안녕하세요"
+
+        # 복원: 순서·측면·번역 보존
+        r = await c.get(f"/api/v1/conversations/{cid}")
+        assert r.status_code == 200
+        msgs = r.json()["messages"]
+        assert [m["side"] for m in msgs] == ["mine", "theirs"]
+        assert msgs[1]["translation"] == "도와주실 수 있나요?"
+
+        # 삭제 → 목록에서 사라지고, 재조회 404
+        assert (await c.delete(f"/api/v1/conversations/{cid}")).status_code == 204
+        assert (await c.get(f"/api/v1/conversations/{cid}")).status_code == 404
+        assert all(x["conversation_id"] != cid for x in (await c.get("/api/v1/conversations")).json())
+
+        # 없는 대화 → 404 (조회·삭제 모두)
+        assert (await c.get("/api/v1/conversations/nope")).status_code == 404
+        assert (await c.delete("/api/v1/conversations/nope")).status_code == 404
+
+
 async def test_session_lifecycle_and_translation(server: str) -> None:
     async with httpx.AsyncClient(base_url=server, timeout=90) as c:
         # 1) 세션 생성 (ko → id, witness en)

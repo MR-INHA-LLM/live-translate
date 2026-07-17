@@ -8,7 +8,11 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.errors import SessionNotFoundError, UnsupportedLanguageError
+from app.errors import (
+    ConversationNotFoundError,
+    SessionNotFoundError,
+    UnsupportedLanguageError,
+)
 from app.schemas.errors import ErrorResponse
 
 
@@ -19,6 +23,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _session_not_found(_: Request, exc: SessionNotFoundError) -> JSONResponse:
         body = ErrorResponse(detail=str(exc) or "session not found",
                              error_code="session_not_found")
+        return JSONResponse(status_code=404, content=body.model_dump())
+
+    @app.exception_handler(ConversationNotFoundError)
+    async def _conversation_not_found(_: Request, exc: ConversationNotFoundError) -> JSONResponse:
+        body = ErrorResponse(detail=str(exc) or "conversation not found",
+                             error_code="conversation_not_found")
         return JSONResponse(status_code=404, content=body.model_dump())
 
     @app.exception_handler(UnsupportedLanguageError)

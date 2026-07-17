@@ -16,6 +16,10 @@ class SessionNotFoundError(DomainError):
     """존재하지 않는 세션 접근 → 404."""
 
 
+class ConversationNotFoundError(DomainError):
+    """존재하지 않는 대화 접근 → 404."""
+
+
 class UnsupportedLanguageError(DomainError):
     """지원하지 않는 언어/언어쌍 → 422."""
 
