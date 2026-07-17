@@ -11,6 +11,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.domain import Revision, RevisionUpdate
+from app.schemas.common import LatencyInfo
 from app.schemas.stream import DraftRequest, DraftResponse
 from app.services.coordinator import DraftSessionCoordinator
 
@@ -35,11 +36,7 @@ async def draft_stream(ws: WebSocket, session_id: str) -> None:
             committed_prefix_len={
                 lang: r.committed_prefix_len for lang, r in update.renderings.items()
             },
-            latency_ms={
-                k: v
-                for k, v in (("ttft", update.ttft_ms), ("total", update.total_ms))
-                if v is not None
-            },
+            latency=LatencyInfo(ttft_ms=update.ttft_ms, total_ms=update.total_ms),
         )
         await ws.send_json(payload.model_dump())
 

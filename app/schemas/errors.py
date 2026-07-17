@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from app.schemas.common import ApiModel
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(ApiModel):
     """일관된 에러 응답 형식."""
 
     detail: str

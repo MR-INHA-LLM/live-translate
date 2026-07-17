@@ -104,6 +104,11 @@ class Turn(BaseModel):
     latency_ms: dict[str, float]      # {"draft_ttft","draft_total","final_ttft","final_total"}
 ```
 
+위는 개념 스케치다. **최적화된 API 스키마 계약은 `app/schemas/`** — 요청은 strict
+(`extra="forbid"`), 응답/이벤트는 `frozen`, 레이턴시는 `LatencyInfo`로 타입화,
+`SessionConfig`는 `model_validator`로 검증(아래), 최종 done 이벤트는 정렬(`AlignmentSpan`)
++ 신뢰도(`ConfidenceSpan`)를 함께 싣는다.
+
 `SessionConfig` 검증: `src_lang`·`tgt_lang`·`witness_langs`는 모두
 `LanguageCatalog`에 존재해야 하고 서로 달라야 한다(witness에 tgt/src 중복 시 제거).
 
@@ -299,8 +304,10 @@ Body = `SessionConfig`. 응답 `{ "session_id": "..." }`. 생성 시 워밍업 �
 { "text":"내일 회의를 오후로 옮겨도 될까요?", "rerank":true }
 // events
 event: token  data: {"delta":"Bisa"}
-event: done   data: {"turn_id":5,"translation":"…","candidates_scored":4,
-                     "degraded":false,"latency_ms":{"ttft":340,"total":1180}}
+event: done   data: {"turn_id":5,"translation":"…","candidates_scored":4,"degraded":false,
+                     "latency":{"ttft_ms":340,"total_ms":1180},
+                     "alignment":[{"src_start":0,"src_end":3,"tgt_start":0,"tgt_end":5}],
+                     "confidence":[{"tgt_start":0,"tgt_end":5,"prob":0.91,"low":false}]}
 event: error  data: {"code":"upstream_quality_error","degraded_to_draft":true}
 ```
 

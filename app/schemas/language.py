@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import Field
+
+from app.schemas.common import ApiModel
 
 
-class LanguageInfo(BaseModel):
+class LanguageInfo(ApiModel):
     """지원 언어 하나."""
 
     code: str  # "ko"
@@ -14,15 +16,15 @@ class LanguageInfo(BaseModel):
     is_dialect: bool = False
 
 
-class LanguagePair(BaseModel):
+class LanguagePair(ApiModel):
     """검증된 언어쌍 + COMET(측정된 쌍만)."""
 
     src: str
     tgt: str
-    comet: float | None = None
+    comet: float | None = Field(None, ge=0.0, le=100.0)
 
 
-class LanguageCatalogResponse(BaseModel):
+class LanguageCatalogResponse(ApiModel):
     """언어 목록 + 검증쌍 + 기본 witness."""
 
     languages: list[LanguageInfo]
