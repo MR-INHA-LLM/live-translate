@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from app.container import Container
+from app.services.conversation import ConversationService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
 from app.services.session import SessionService
@@ -20,6 +21,10 @@ def get_container(request: Request) -> Container:
 
 def get_session_service(request: Request) -> SessionService:
     return get_container(request).session_service
+
+
+def get_conversation_service(request: Request) -> ConversationService:
+    return get_container(request).conversation_service
 
 
 def get_quality_service(request: Request) -> QualityService:

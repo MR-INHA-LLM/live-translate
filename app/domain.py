@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 
 
@@ -139,6 +140,41 @@ class Turn:
     source: str
     draft: dict[str, str]
     final: str | None = None
+
+
+@dataclass(frozen=True)
+class StoredMessage:
+    """저장된 대화의 메시지 한 건 (UI가 렌더한 최종 형태)."""
+
+    side: str  # "mine" | "theirs"
+    source: str
+    translation: str
+    witness: str | None = None
+    seq: int = 0
+
+
+@dataclass(frozen=True)
+class ConversationSummary:
+    """대화 목록 항목 — 상세 메시지 없이 요약만."""
+
+    id: str
+    src_lang: str
+    tgt_lang: str
+    witness_lang: str | None
+    title: str | None
+    message_count: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ConversationDetail:
+    """대화 상세 — 설정 + 메시지 전체(복원용)."""
+
+    id: str
+    src_lang: str
+    tgt_lang: str
+    witness_lang: str | None
+    messages: list[StoredMessage]
 
 
 # 코디네이터가 초벌 업데이트를 밖으로 흘려보내는 콜백 타입.

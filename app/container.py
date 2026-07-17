@@ -9,8 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.engines.registry import ModelRegistry
-from app.repositories.base import SessionRepository
+from app.repositories.base import ConversationRepository, SessionRepository
 from app.repositories.cache import RenderingCache
+from app.services.conversation import ConversationService
 from app.services.draft import DraftService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
@@ -23,8 +24,10 @@ class Container:
 
     registry: ModelRegistry
     session_repo: SessionRepository
+    conversation_repo: ConversationRepository
     cache: RenderingCache
     draft_service: DraftService
     quality_service: QualityService
     session_service: SessionService
+    conversation_service: ConversationService
     language_service: LanguageService

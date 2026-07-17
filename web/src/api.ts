@@ -37,6 +37,74 @@ export interface TurnDone {
   latency: { ttft_ms: number | null; total_ms: number | null };
 }
 
+// --- 대화 저장소 (DB 영구 저장 이력) ---
+export interface ConversationSummary {
+  conversation_id: string;
+  src_lang: string;
+  tgt_lang: string;
+  witness_lang: string | null;
+  title: string | null;
+  message_count: number;
+  updated_at: string;
+}
+export interface StoredMessage {
+  seq: number;
+  side: "mine" | "theirs";
+  source: string;
+  translation: string;
+  witness: string | null;
+}
+export interface ConversationDetail {
+  conversation_id: string;
+  src_lang: string;
+  tgt_lang: string;
+  witness_lang: string | null;
+  messages: StoredMessage[];
+}
+
+export async function createConversation(body: {
+  src_lang: string;
+  tgt_lang: string;
+  witness_lang: string | null;
+}): Promise<string> {
+  const r = await fetch(`${API_BASE}/api/v1/conversations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`create conversation ${r.status}`);
+  return (await r.json()).conversation_id as string;
+}
+
+export async function listConversations(): Promise<ConversationSummary[]> {
+  const r = await fetch(`${API_BASE}/api/v1/conversations`);
+  if (!r.ok) throw new Error(`list conversations ${r.status}`);
+  return r.json();
+}
+
+export async function getConversation(id: string): Promise<ConversationDetail> {
+  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`);
+  if (!r.ok) throw new Error(`get conversation ${r.status}`);
+  return r.json();
+}
+
+export async function addMessage(
+  id: string,
+  body: { side: "mine" | "theirs"; source: string; translation: string; witness: string | null },
+): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`add message ${r.status}`);
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`, { method: "DELETE" });
+  if (!r.ok) throw new Error(`delete conversation ${r.status}`);
+}
+
 export async function getLanguages(): Promise<LanguageCatalog> {
   const r = await fetch(`${API_BASE}/api/v1/languages`);
   if (!r.ok) throw new Error(`languages ${r.status}`);

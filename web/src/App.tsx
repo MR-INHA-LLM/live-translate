@@ -18,12 +18,45 @@ export default function App() {
 
   return (
     <div className="console">
-      {/* ① 좌: 설정 · 검증 */}
-      <aside className="col side">
-        <div className="brand">실시간 번역 콘솔</div>
+      {/* ① 좌: 번역 세션 저장소 */}
+      <aside className="col store">
+        <div className="storehead">
+          <div className="brand">번역 세션</div>
+          <button className="newconv" onClick={c.newConversation}>+ 새 대화</button>
+        </div>
+        <div className="convlist">
+          {c.conversations.length === 0 && (
+            <p className="empty">저장된 대화가 없습니다.<br />메시지를 보내면 여기에 쌓입니다.</p>
+          )}
+          {c.conversations.map((cv) => (
+            <div
+              key={cv.conversation_id}
+              className={`convitem ${cv.conversation_id === c.activeConvId ? "active" : ""}`}
+            >
+              <button
+                className="convopen"
+                onClick={() => void c.loadConversation(cv.conversation_id)}
+              >
+                <span className="convtitle">{cv.title ?? "새 대화"}</span>
+                <span className="convmeta">
+                  {c.nameOf(cv.src_lang)} → {c.nameOf(cv.tgt_lang)} · {cv.message_count}개
+                </span>
+              </button>
+              <button
+                className="convdel"
+                title="세션 삭제"
+                onClick={() => void c.removeConversation(cv.conversation_id)}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      </aside>
 
-        <section>
-          <h3>번역 방향</h3>
+      {/* ② 중앙: 운영자 작업대 (방향 선택 · 검증 포함) */}
+      <main className="col work">
+        <header className="whead">
           <div className="pair">
             <span className="tag">{c.nameOf(c.src)}</span>
             <button className="swap" onClick={c.swap} title="방향 스왑">⇄</button>
@@ -33,32 +66,6 @@ export default function App() {
               ))}
             </select>
           </div>
-          <p className="hint">맥락 반영 최종 번역 · 확인용 {c.witnessLang}</p>
-        </section>
-
-        <section className="verify">
-          <h3>번역 검증 (최근)</h3>
-          {lastMine ? (
-            <div className="vbox">
-              <div className="vrow"><span className="vlab">원문</span>{lastMine.source}</div>
-              <div className="vrow"><span className="vlab">번역</span>{lastMine.translation}</div>
-              {lastMine.witness && (
-                <div className="vrow wit">
-                  <span className="vlab">확인용 {c.witnessLang}</span>{lastMine.witness}
-                </div>
-              )}
-              <p className="note">구 정렬·단어 신뢰도(QE)는 백엔드 배선 후 여기 표시됩니다.</p>
-            </div>
-          ) : (
-            <p className="empty">메시지를 보내면 검증이 여기 표시됩니다.</p>
-          )}
-        </section>
-      </aside>
-
-      {/* ② 중앙: 운영자 작업대 */}
-      <main className="col work">
-        <header className="whead">
-          <span className="wtitle">{c.nameOf(c.src)} → {c.nameOf(c.tgt)}</span>
           {c.latency?.ttft_ms != null && (
             <span className="lat">초벌 {Math.round(c.latency.ttft_ms)}ms</span>
           )}
@@ -82,6 +89,18 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {lastMine && (
+          <div className="verifybar">
+            <span className="vlab">검증</span>
+            <span className="vsrc">{lastMine.source}</span>
+            <span className="varr">→</span>
+            <span className="vtr">{lastMine.translation}</span>
+            {lastMine.witness && (
+              <span className="vwit">· 확인용 {c.witnessLang} “{lastMine.witness}”</span>
+            )}
+          </div>
+        )}
 
         <div className="composer">
           {(draftTgt || draftWit) && (
@@ -114,7 +133,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* ③ 우: 고객 화면 — 빈 스테이지 위에 기기(폰)처럼 부양 */}
+      {/* ③ 우: 고객 화면 — 빈 스테이지 위에 태블릿처럼 부양 */}
       <aside className="col customer">
         <div className="stagelabel">고객이 보는 화면 · {c.nameOf(c.tgt)}</div>
         <div className="device">
