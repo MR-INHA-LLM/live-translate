@@ -24,6 +24,9 @@
 - **web/console**: 고객 화면을 태블릿 규격(580px)으로 키우고 본문 폰트를 확대해 데모에서 "실제 고객 기기" 느낌을 강화. 빈 스테이지 위에 부양하도록 우측 패널만 배경 분리.
 - **web/console**: 고객 화면에 입력창 추가 — 외국인 고객이 자기 언어로 입력하면 역방향 세션으로 운영자 언어로 번역돼 작업대에 수신된다(양방향 대화 데모).
 
+### 🔧 Infra / Ops
+- **compose**: vLLM 두 tier(draft·quality)를 **도커화** — `vllm/vllm-openai` 이미지로 `vllm-draft`·`vllm-quality` 서비스 추가, 로컬 `./models`를 마운트해 재다운로드 없이 로드, GPU 예약(`deploy.resources … nvidia`), healthcheck 포함. 이제 **`docker compose --profile gpu up` 한 번**으로 vLLM+gateway+nginx 전체 기동(정렬은 호스트 :8003 유지). gateway `DRAFT_URL`/`QUALITY_URL` 기본값을 컨테이너 서비스명으로 변경(호스트 vLLM은 env override). 전제: `nvidia-container-toolkit` 설치.
+
 ### ♻️ Refactor
 - **web/console**: 3분할 콘솔에서 전체를 카드로 띄우던 처리를 걷어내고 풀 레이아웃으로 복귀. 부양 효과는 고객 화면 한 곳에만 남겨 시선을 집중.
 
@@ -31,4 +34,4 @@
 - **tests/e2e**: 대화 저장소 CRUD(생성·추가·목록·복원·404) pytest 추가(vLLM 불필요, 순수 DB). `web/e2e-smoke.mjs`에 목록 적재·새 대화·복원 시나리오 추가.
 
 ---
-**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). ⚠️ **서빙 프로세스 3종 필요**(호스트): `bash serve_draft.sh`(HY-MT, :8001, util 0.30), `bash serve_quality.sh`(Qwen3-4B, :8002), `bash serve_aligner.sh`(awesome-align, :8003). compose는 `QUALITY_URL=host.docker.internal:8002`, `QUALITY_MODEL=qwen3-4b-instruct`, `ALIGN_URL=host.docker.internal:8003`. quality/aligner 미기동 시 각각 draft degrade / 정렬 생략으로 graceful. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.
+**배포 노트**: **전체 스택 = `docker compose --profile gpu up`** (vLLM draft·quality + gateway + nginx). 전제: `nvidia-container-toolkit`. 정렬은 호스트 프로세스 `bash serve_aligner.sh`(:8003) — 미기동 시 정렬 생략(graceful). 호스트 vLLM 방식으로 되돌리려면 `DRAFT_URL`/`QUALITY_URL`을 `host.docker.internal:8001/8002`로 override하고 `serve_draft.sh`·`serve_quality.sh` 사용. `QUALITY_MODEL=qwen3-4b-instruct`. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.

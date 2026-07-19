@@ -1,13 +1,14 @@
-# 배포 — 게이트웨이 + nginx(리버스 프록시). 기본은 호스트에 떠 있는 vLLM(:8001)에
-# 붙는다. 자체 완결(GPU) 배포는 `--profile gpu`로 vllm-draft까지 띄운다.
+# 배포 — 전체 스택을 `docker compose --profile gpu up` 한 번으로 띄운다:
+#   vllm-draft(:8000) + vllm-quality(:8000) + gateway + nginx (+ 정렬은 호스트 :8003).
+# 호스트 vLLM에 붙이려면 DRAFT_URL/QUALITY_URL을 host.docker.internal:8001/8002로 override.
 services:
   gateway:
     build: .
     restart: unless-stopped
     environment:
-      DRAFT_URL: ${DRAFT_URL:-http://host.docker.internal:8001/v1}
-      QUALITY_URL: ${QUALITY_URL:-http://host.docker.internal:8002/v1}   # Qwen3-4B (context-aware 최종)
-      ALIGN_URL: ${ALIGN_URL:-http://host.docker.internal:8003}          # awesome-align 정렬 서비스
+      DRAFT_URL: ${DRAFT_URL:-http://vllm-draft:8000/v1}
+      QUALITY_URL: ${QUALITY_URL:-http://vllm-quality:8000/v1}
+      ALIGN_URL: ${ALIGN_URL:-http://host.docker.internal:8003}          # 정렬은 호스트 프로세스
       DRAFT_MODEL: hy-mt1.5-1.8b
       QUALITY_MODEL: qwen3-4b-instruct
       DB_URL: sqlite+aiosqlite:////data/app.db
@@ -35,27 +36,52 @@ services:
       gateway:
         condition: service_healthy
 
-  # 자체 완결 배포용 (GPU). `docker compose --profile gpu up`
-  # gateway의 DRAFT_URL/QUALITY_URL을 http://vllm-draft:8000/v1 로 바꿔 사용.
+  # Draft tier (초벌, 저지연). 로컬 모델을 마운트해 재다운로드 없이 로드.
   vllm-draft:
     image: vllm/vllm-openai:latest
     profiles: ["gpu"]
     command: >
-      --model tencent/HY-MT1.5-1.8B-FP8 --served-model-name hy-mt1.5-1.8b
+      --model /models/HY-MT1.5-1.8B --served-model-name hy-mt1.5-1.8b
       --enable-prefix-caching --max-model-len 4096 --gpu-memory-utilization 0.30 --port 8000
-    environment:
+    environment: &vllm_env
       VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
       VLLM_USE_FLASHINFER_SAMPLER: "0"
       VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
     volumes:
+      - ./models:/models:ro
       - hf-cache:/root/.cache/huggingface
-    deploy:
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    deploy: &vllm_gpu
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # Quality tier (context-aware 최종, Qwen3-4B). draft와 단일 GPU 공유.
+  vllm-quality:
+    image: vllm/vllm-openai:latest
+    profiles: ["gpu"]
+    command: >
+      --model /models/Qwen3-4B-Instruct-2507 --served-model-name qwen3-4b-instruct
+      --enable-prefix-caching --max-model-len 8192 --gpu-memory-utilization 0.50 --port 8000
+    environment: *vllm_env
+    volumes:
+      - ./models:/models:ro
+      - hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    deploy: *vllm_gpu
 
 volumes:
   gateway-data:
