@@ -6,6 +6,10 @@
 ## [Unreleased]
 
 ### ✨ Features
+- **web/console**: 운영자 채팅 버블에 **초벌·LLM 번역을 함께** 표시 — LLM 최종 번역이 완료되면 빠른 초벌(draft)과 LLM(quality) 결과를 한 버블에 나란히 보여준다. 검증(확인용 언어 back-check)도 같은 버블 안에 포함하고, 하단 검증바는 제거.
+- **web/console**: 각 단계의 **소요 시간(초)** 을 버블에 표시(초벌·LLM·검증). 캐시 히트 초벌도 실제 소요(≈0초)를 보고하도록 draft 서비스 보정.
+- **api/conversations**: 메시지에 `draft`·`draft_ms`·`final_ms` 필드 추가 — 초벌 번역과 각 단계 소요 시간을 저장·복원까지 보존.
+- **web**: 제공된 `favicon.ico`를 `web/public/`로 이동해 적용, 문서 제목을 "실시간 번역 콘솔", `lang="ko"`로 정리.
 - **api/conversations**: 대화 저장소 API 신설(`POST/GET /api/v1/conversations`, `GET /{id}`, `POST /{id}/messages`) — UI가 확정한 대화를 DB(SQLite)에 영구 저장하고 목록·복원한다. 번역 파이프라인(sessions/turns)과 분리된 뷰 모델(decisions.md D14).
 - **web/console**: 좌측 패널을 **번역 세션 저장소**로 재편 — 역할이 불명확하던 "실시간 번역 콘솔"을 대신해 저장된 대화 목록(제목·언어쌍·개수)을 보여주고, 클릭하면 언어쌍과 메시지를 그대로 복원한다. "+ 새 대화"로 새 세션 시작.
 - **api/conversations**: 대화 삭제 `DELETE /api/v1/conversations/{id}` — 좌측 목록의 각 세션을 호버 시 나타나는 ✕로 삭제(메시지까지 함께 삭제).
@@ -21,4 +25,4 @@
 - **tests/e2e**: 대화 저장소 CRUD(생성·추가·목록·복원·404) pytest 추가(vLLM 불필요, 순수 DB). `web/e2e-smoke.mjs`에 목록 적재·새 대화·복원 시나리오 추가.
 
 ---
-**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성(기존 데이터 불변, 마이그레이션 없음). env 변경 없음.
+**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.

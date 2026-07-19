@@ -12,14 +12,18 @@ import {
   type ConversationSummary,
   type DraftResponse,
   type LanguageCatalog,
+  type MessageInput,
 } from "./api";
 
 export interface ChatMessage {
   id: string;
   side: "mine" | "theirs";
   source: string;
-  translation: string;
-  witness?: string;
+  translation: string; // LLM(최종) 번역
+  draft?: string; // 초벌(빠른) 번역
+  witness?: string; // 검증(확인용 언어)
+  draftMs?: number; // 초벌·검증 소요(ms)
+  finalMs?: number; // LLM 소요(ms)
 }
 
 const DEBOUNCE_MS = 200; // 초벌 발사 전 대기 (StabilityConfig.debounce_ms 기본과 동일)
@@ -50,6 +54,8 @@ export function useChat() {
   const debounce = useRef<number | undefined>(undefined);
   // 대화 id는 저장 사이 즉시 참조가 필요해 ref를 원본으로, state는 목록 하이라이트용.
   const convId = useRef<string | null>(null);
+  // 초벌 소요(ms) — 전송 시점 캡처를 latency state 클로저 레이스 없이 하려고 ref로 둔다.
+  const lastDraftMs = useRef<number | undefined>(undefined);
 
   // 카탈로그 로드 → 세션 생성 → WS 연결 (언어쌍 바뀌면 재생성)
   useEffect(() => {
@@ -75,6 +81,7 @@ export function useChat() {
         latestRev.current = msg.revision_id;
         setDraft(msg.renderings);
         setLatency(msg.latency);
+        lastDraftMs.current = msg.latency.total_ms ?? msg.latency.ttft_ms ?? undefined;
       };
       ws.current = sock;
     })().catch(() => {});
@@ -95,7 +102,7 @@ export function useChat() {
 
   // 확정 메시지를 대화에 영속(첫 메시지에서 대화를 지연 생성).
   const persistMessage = useCallback(
-    async (msg: { side: "mine" | "theirs"; source: string; translation: string; witness: string | null }) => {
+    async (msg: MessageInput) => {
       let id = convId.current;
       if (!id) {
         id = await createConversation({ src_lang: src, tgt_lang: tgt, witness_lang: witnessLang });
@@ -148,23 +155,35 @@ export function useChat() {
   const send = useCallback(async () => {
     const source = text.trim();
     if (!source || !sessionId || sending) return;
+    // 전송 시점의 초벌(빠른) 번역·검증(확인용 언어)과 그 소요 시간을 함께 캡처한다.
+    const draftText = draft[tgt];
     const witness = tgt === witnessLang ? undefined : draft[witnessLang];
+    const draftMs = lastDraftMs.current;
     setSending(true);
     setText("");
     setDraft({});
     try {
       let translation = "";
+      let finalMs: number | undefined;
       await streamTurn(sessionId, source, {
         onDone: (done) => {
           translation = done.translation;
+          finalMs = done.latency.total_ms ?? done.latency.ttft_ms ?? undefined;
           setMessages((m) => [
             ...m,
-            { id: `m-${done.turn_id}-${Date.now()}`, side: "mine", source, translation, witness },
+            {
+              id: `m-${done.turn_id}-${Date.now()}`, side: "mine", source, translation,
+              draft: draftText, witness, draftMs, finalMs,
+            },
           ]);
         },
       });
       if (translation) {
-        await persistMessage({ side: "mine", source, translation, witness: witness ?? null });
+        await persistMessage({
+          side: "mine", source, translation,
+          draft: draftText ?? null, witness: witness ?? null,
+          draft_ms: draftMs ?? null, final_ms: finalMs ?? null,
+        });
       }
     } finally {
       setSending(false);
@@ -178,9 +197,11 @@ export function useChat() {
     setCustText("");
     try {
       let translation = "";
+      let finalMs: number | undefined;
       await streamTurn(revSessionId, source, {
         onDone: (done) => {
           translation = done.translation; // 운영자 언어(src)로 번역
+          finalMs = done.latency.total_ms ?? done.latency.ttft_ms ?? undefined;
           setMessages((m) => [
             ...m,
             {
@@ -188,12 +209,16 @@ export function useChat() {
               side: "theirs",
               source, // 고객이 입력한 원문(tgt 언어)
               translation,
+              finalMs,
             },
           ]);
         },
       });
       if (translation) {
-        await persistMessage({ side: "theirs", source, translation, witness: null });
+        await persistMessage({
+          side: "theirs", source, translation,
+          draft: null, witness: null, draft_ms: null, final_ms: finalMs ?? null,
+        });
       }
     } finally {
       setCustSending(false);
@@ -228,7 +253,10 @@ export function useChat() {
           side: m.side,
           source: m.source,
           translation: m.translation,
+          draft: m.draft ?? undefined,
           witness: m.witness ?? undefined,
+          draftMs: m.draft_ms ?? undefined,
+          finalMs: m.final_ms ?? undefined,
         })),
       );
       setSrc(detail.src_lang);

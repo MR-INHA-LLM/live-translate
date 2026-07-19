@@ -117,7 +117,8 @@ class SqlConversationRepository:
             )
             messages = [
                 StoredMessage(side=m.side, source=m.source, translation=m.translation,
-                              witness=m.witness, seq=m.seq)
+                              draft=m.draft, witness=m.witness,
+                              draft_ms=m.draft_ms, final_ms=m.final_ms, seq=m.seq)
                 for m in res.scalars().all()
             ]
             return ConversationDetail(
@@ -138,12 +139,14 @@ class SqlConversationRepository:
                 conv.title = message.source.strip()[:_TITLE_MAX]
             s.add(MessageRow(
                 conversation_id=conv_id, seq=seq, side=message.side,
-                source=message.source, translation=message.translation, witness=message.witness,
+                source=message.source, draft=message.draft, translation=message.translation,
+                witness=message.witness, draft_ms=message.draft_ms, final_ms=message.final_ms,
             ))
             await s.commit()
             return StoredMessage(
                 side=message.side, source=message.source, translation=message.translation,
-                witness=message.witness, seq=seq,
+                draft=message.draft, witness=message.witness,
+                draft_ms=message.draft_ms, final_ms=message.final_ms, seq=seq,
             )
 
     async def delete(self, conv_id: str) -> bool:

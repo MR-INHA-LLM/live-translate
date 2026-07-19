@@ -29,8 +29,11 @@ class MessageCreate(ApiRequest):
 
     side: Literal["mine", "theirs"]
     source: str = Field(min_length=1)
-    translation: str = Field(min_length=1)
-    witness: str | None = None
+    translation: str = Field(min_length=1)  # LLM(최종) 번역
+    draft: str | None = None  # 초벌(빠른) 번역
+    witness: str | None = None  # 검증(확인용 언어)
+    draft_ms: float | None = Field(None, ge=0)  # 초벌·검증 소요(ms)
+    final_ms: float | None = Field(None, ge=0)  # LLM 소요(ms)
 
 
 class MessageRead(ApiModel):
@@ -40,7 +43,10 @@ class MessageRead(ApiModel):
     side: Literal["mine", "theirs"]
     source: str
     translation: str
+    draft: str | None = None
     witness: str | None = None
+    draft_ms: float | None = None
+    final_ms: float | None = None
 
 
 class ConversationCreated(ApiModel):

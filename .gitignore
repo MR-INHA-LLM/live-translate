@@ -1,7 +1,9 @@
 # Models & weights (multi-GB — never commit)
-models/
+# 루트 한정(/models/) — app/models/ 소스 패키지는 추적해야 한다.
+/models/
 *.safetensors
 *.gguf
+!app/models/
 
 # Eval data & generated hypotheses (re-downloadable / re-generatable)
 data/

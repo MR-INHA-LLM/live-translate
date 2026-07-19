@@ -14,7 +14,7 @@ export default function App() {
   const targets = (c.catalog?.languages ?? []).filter((l) => l.code !== c.src);
   const draftTgt = c.draft[c.tgt];
   const draftWit = c.tgt !== c.witnessLang ? c.draft[c.witnessLang] : undefined;
-  const lastMine = [...c.messages].reverse().find((m) => m.side === "mine");
+  const secs = (ms: number) => `${(ms / 1000).toFixed(2)}초`;
 
   return (
     <div className="console">
@@ -75,32 +75,43 @@ export default function App() {
           {c.messages.length === 0 && (
             <p className="empty center">아래에 입력하면 번역이 시작됩니다.</p>
           )}
-          {c.messages.map((m) => (
-            <div key={m.id} className={`row ${m.side}`}>
-              <div className="meta">{m.side === "mine" ? "운영자(나)" : "고객"}</div>
-              <div className="bubble">
-                <div className="orig">{m.source}</div>
-                <div className="trans">
-                  <span className="lab">{m.side === "mine" ? `→ ${c.tgt}` : `→ ${c.src}`}</span>
-                  {m.translation}
+          {c.messages.map((m) => {
+            const transLang = m.side === "mine" ? c.tgt : c.src;
+            return (
+              <div key={m.id} className={`row ${m.side}`}>
+                <div className="meta">{m.side === "mine" ? "운영자(나)" : "고객"}</div>
+                <div className="bubble">
+                  <div className="orig">{m.source}</div>
+                  {m.draft && (
+                    <div className="trans draft">
+                      <span className="lab">
+                        초벌 {transLang}
+                        {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
+                      </span>
+                      {m.draft}
+                    </div>
+                  )}
+                  <div className="trans final">
+                    <span className="lab">
+                      LLM {transLang}
+                      {m.finalMs != null && <span className="ms">{secs(m.finalMs)}</span>}
+                    </span>
+                    {m.translation}
+                  </div>
+                  {m.witness && (
+                    <div className="trans verify">
+                      <span className="lab">
+                        검증 {c.witnessLang}
+                        {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
+                      </span>
+                      {m.witness}
+                    </div>
+                  )}
                 </div>
-                {m.witness && <div className="wit">↳ {c.witnessLang} · “{m.witness}”</div>}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-
-        {lastMine && (
-          <div className="verifybar">
-            <span className="vlab">검증</span>
-            <span className="vsrc">{lastMine.source}</span>
-            <span className="varr">→</span>
-            <span className="vtr">{lastMine.translation}</span>
-            {lastMine.witness && (
-              <span className="vwit">· 확인용 {c.witnessLang} “{lastMine.witness}”</span>
-            )}
-          </div>
-        )}
 
         <div className="composer">
           {(draftTgt || draftWit) && (

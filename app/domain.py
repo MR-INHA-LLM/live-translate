@@ -144,12 +144,19 @@ class Turn:
 
 @dataclass(frozen=True)
 class StoredMessage:
-    """저장된 대화의 메시지 한 건 (UI가 렌더한 최종 형태)."""
+    """저장된 대화의 메시지 한 건 (UI가 렌더한 최종 형태).
+
+    한 메시지는 두 tier(초벌·LLM)의 번역과 검증(확인용 언어)을 함께 담고,
+    각 단계의 소요 시간(ms)도 보존한다.
+    """
 
     side: str  # "mine" | "theirs"
     source: str
-    translation: str
-    witness: str | None = None
+    translation: str  # LLM(최종) 번역
+    draft: str | None = None  # 초벌(빠른) 번역
+    witness: str | None = None  # 검증(확인용 언어)
+    draft_ms: float | None = None  # 초벌·검증 소요(ms)
+    final_ms: float | None = None  # LLM 소요(ms)
     seq: int = 0
 
 
