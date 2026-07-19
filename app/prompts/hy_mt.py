@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from app.domain import ChatMessage, Conversation, TranslationTask
+from app.domain import ChatMessage, TranslationTask
 
 # 타겟 언어의 영문 표기 ({target_language} 슬롯).
 _LANG_EN: dict[str, str] = {
@@ -32,13 +32,15 @@ class HyMtPromptBuilder:
         """맥락 없는 단발 번역 프롬프트."""
         return [ChatMessage(role="user", content=_user_prompt(task.src_lang, task.tgt_lang, task.source))]
 
-    def build_contextual(self, task: TranslationTask, ctx: Conversation) -> list[ChatMessage]:
-        """직전 턴 컨텍스트를 중문 contextual template로 주입."""
-        lines = [f"{t.source} → {t.translation}" for t in ctx.turns]
-        context = "\n".join(lines)
+    def build_contextual(self, task: TranslationTask, context: list[str]) -> list[ChatMessage]:
+        """대화 맥락(직전 턴 원문 순서열)을 중문 contextual template로 주입.
+
+        Pombal et al.(TACL 2026): 번역문이 아닌 원문(x_<t)을 그대로 주입한다.
+        """
+        history = "\n".join(context)
         target = _LANG_ZH.get(task.tgt_lang, _LANG_EN.get(task.tgt_lang, task.tgt_lang))
         content = (
-            f"{context}\n参考上面的信息，把下面的文本翻译成{target}，"
+            f"{history}\n参考上面的对话，把下面的文本翻译成{target}，"
             f"注意不需要翻译上文，也不要额外解释：\n{task.source}\n"
         )
         return [ChatMessage(role="user", content=content)]

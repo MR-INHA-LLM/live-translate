@@ -141,12 +141,13 @@ export async function streamTurn(
   sessionId: string,
   text: string,
   handlers: { onToken?: (d: string) => void; onDone?: (d: TurnDone) => void },
+  context: string[] = [], // 직전 턴 원문열(Pombal 컨텍스트)
   signal?: AbortSignal,
 ): Promise<void> {
   const r = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/turns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, context }),
     signal,
   });
   if (!r.ok || !r.body) throw new Error(`turn ${r.status}`);

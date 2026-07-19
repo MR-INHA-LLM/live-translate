@@ -6,6 +6,9 @@
 ## [Unreleased]
 
 ### ✨ Features
+- **quality tier**: 최종 번역을 실제 경량 LLM **Qwen3-4B-Instruct-2507** 로 서빙(단일 GPU를 draft와 공유). 더 이상 draft로 degrade하지 않아 초벌과 LLM 결과가 실제로 달라진다(예: 초벌 "move the meeting" vs LLM "reschedule the meeting"). 엔진 도달 불가 시에만 draft로 graceful degrade. 서빙은 `serve_draft.sh`·`serve_quality.sh`로 코드화.
+- **quality tier**: **Pombal et al.(TACL 2026)** 문맥 기반 번역 프레임워크 적용 — 직전 턴들의 **원문**(양측, 순서대로)을 컨텍스트로 주입해 대명사·생략·모호성을 해소. FE가 대화 원문열을 턴 요청 `context`로 전달, `QwenPromptBuilder`가 context-augmented 프롬프트 구성.
+- **web/console**: 좌측 세션 저장소 하단에 근거 논문 각주("문맥 기반 번역" · Pombal et al., TACL 2026 링크) 추가.
 - **web/console**: 운영자 채팅 버블에 **초벌·LLM 번역을 함께** 표시 — LLM 최종 번역이 완료되면 빠른 초벌(draft)과 LLM(quality) 결과를 한 버블에 나란히 보여준다. 검증(확인용 언어 back-check)도 같은 버블 안에 포함하고, 하단 검증바는 제거.
 - **web/console**: 각 단계의 **소요 시간(초)** 을 버블에 표시(초벌·LLM·검증). 캐시 히트 초벌도 실제 소요(≈0초)를 보고하도록 draft 서비스 보정.
 - **api/conversations**: 메시지에 `draft`·`draft_ms`·`final_ms` 필드 추가 — 초벌 번역과 각 단계 소요 시간을 저장·복원까지 보존.
@@ -25,4 +28,4 @@
 - **tests/e2e**: 대화 저장소 CRUD(생성·추가·목록·복원·404) pytest 추가(vLLM 불필요, 순수 DB). `web/e2e-smoke.mjs`에 목록 적재·새 대화·복원 시나리오 추가.
 
 ---
-**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.
+**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). ⚠️ **quality vLLM 서버 필요**: `bash serve_quality.sh`(Qwen3-4B, :8002)와 `bash serve_draft.sh`(HY-MT, :8001, util 0.30으로 낮춤)를 함께 기동. compose는 `QUALITY_URL=host.docker.internal:8002`, `QUALITY_MODEL=qwen3-4b-instruct`로 설정. quality 미기동 시 자동으로 draft degrade. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.

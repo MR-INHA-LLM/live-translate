@@ -16,6 +16,10 @@ class TurnRequest(ApiRequest):
 
     text: str = Field(min_length=1)
     rerank: bool = False
+    context: list[str] = Field(
+        default_factory=list,
+        description="직전 턴들의 원문 순서열(양측, 오래된→최근). Pombal TACL 2026 컨텍스트.",
+    )
     idempotency_key: str | None = Field(None, description="재시도 중복 방지 (decisions.md D12)")
 
 

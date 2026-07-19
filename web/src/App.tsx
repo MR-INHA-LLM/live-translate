@@ -52,6 +52,12 @@ export default function App() {
             </div>
           ))}
         </div>
+        <footer className="storefoot">
+          <a href="https://aclanthology.org/2026.tacl-1.26/" target="_blank" rel="noreferrer">
+            문맥 기반 번역
+          </a>
+          <span> · Pombal et al., TACL 2026</span>
+        </footer>
       </aside>
 
       {/* ② 중앙: 운영자 작업대 (방향 선택 · 검증 포함) */}

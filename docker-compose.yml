@@ -6,8 +6,9 @@ services:
     restart: unless-stopped
     environment:
       DRAFT_URL: ${DRAFT_URL:-http://host.docker.internal:8001/v1}
-      QUALITY_URL: ${QUALITY_URL:-http://host.docker.internal:8001/v1}   # M1: quality는 draft로 degrade
+      QUALITY_URL: ${QUALITY_URL:-http://host.docker.internal:8002/v1}   # Qwen3-4B (context-aware 최종)
       DRAFT_MODEL: hy-mt1.5-1.8b
+      QUALITY_MODEL: qwen3-4b-instruct
       DB_URL: sqlite+aiosqlite:////data/app.db
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:18090"]'
     extra_hosts:

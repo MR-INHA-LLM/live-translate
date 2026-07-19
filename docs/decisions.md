@@ -261,3 +261,24 @@ FE 좌측 패널을 "번역 세션 저장소"로 만들며(대화 목록·클릭
   세션은 신규). 이력 열람·재개 UX가 목표이므로 수용. 완전한 문맥 승계는 세션 시드가 필요(후속).
 - **의도적 중복**: `messages`는 `turns`와 데이터가 겹치나 목적이 다르다(사용자 이력 뷰 vs
   엔진 컨텍스트 소스). 이벤트 로그↔뷰 모델 분리로 보고 drift로 취급하지 않는다.
+
+### D15. Quality tier = Qwen3-4B-Instruct + Pombal 컨텍스트 프레임워크
+
+M1까지 quality tier를 draft(HY-MT)로 degrade해 두었으나(초벌==최종으로 보임), 실제
+경량 LLM을 서빙해 **문맥 반영 최종 번역**을 만든다.
+
+- **모델 선정**: Gemma 3/4 계열은 HF gated(수동 승인)라 read-only 토큰으로 불안정 →
+  **open 모델 `Qwen/Qwen3-4B-Instruct-2507`** 채택(다국어 우수, 경량). 단일 RTX 4090을
+  draft와 공유: draft `--gpu-memory-utilization 0.30`(~7GB) + quality `0.50`(~12GB) = ~19/24GB.
+  서빙은 `serve_draft.sh`·`serve_quality.sh`로 코드화(WSL2 vLLM 플래그 포함).
+- **컨텍스트 = Pombal et al.(TACL 2026)** *A Context-aware Framework for Translation-mediated
+  Conversations*. 핵심: 컨텍스트로 직전 턴들의 **원문(x_<t)** 을 순서대로 주입한다(번역문
+  아님). 화자 역할·메타데이터는 넣지 않는 미니멀 구성. 6~10턴이면 대부분 충분(§6.1).
+  - 우리 구조: 엔진 세션이 방향별로 분리(운영자/고객)라 세션 턴만으론 한쪽만 보인다. 그래서
+    **FE가 대화의 이전 원문열(양측, 순서대로)을 턴 요청 `context`에 담아 전달**하고, 서버는
+    `ContextAssembler.trim`(최근 N턴·문자예산) 후 `QwenPromptBuilder.build_contextual`로
+    context-augmented 프롬프트를 만든다. 결합도 낮고 양측 맥락을 모두 반영.
+- **정직한 degrade**: quality 엔진 도달 불가/미등록 시 draft로 폴백하고 `degraded=True`.
+- **실측**: `그거 금요일까지 보내주세요` → quality "Please send that by Friday"(정상) vs
+  draft "Please keep that until Friday"(오역). 초벌 "move the meeting" vs LLM "reschedule
+  the meeting"처럼 두 tier가 실제로 다른 출력을 낸다. 동음이의어 완전 해소는 4B 용량 한계.

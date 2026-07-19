@@ -34,7 +34,7 @@ async def create_turn(
     session = await sessions.get(session_id)  # 없으면 SessionNotFoundError → 404
 
     async def event_stream() -> AsyncIterator[str]:
-        async for ev in quality.translate_turn(session, req.text, req.rerank):
+        async for ev in quality.translate_turn(session, req.text, req.rerank, req.context):
             if isinstance(ev, TurnTokenEvent):
                 yield _sse("token", ev.model_dump_json())
             elif isinstance(ev, TurnDoneEvent):

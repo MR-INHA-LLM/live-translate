@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
@@ -91,21 +91,6 @@ class RevisionUpdate:
     ttft_ms: float | None = None
     total_ms: float | None = None
     cached: bool = False
-
-
-@dataclass(frozen=True)
-class ConversationTurn:
-    """컨텍스트 조립용 과거 턴 (이중언어)."""
-
-    source: str
-    translation: str
-
-
-@dataclass(frozen=True)
-class Conversation:
-    """직전 N턴 컨텍스트."""
-
-    turns: list[ConversationTurn] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

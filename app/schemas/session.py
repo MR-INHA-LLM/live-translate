@@ -53,7 +53,7 @@ class SessionConfig(ApiRequest):
     domain: str = "general"
     formality: Literal["polite", "casual", "neutral"] = "neutral"
     draft_model: str = "hy-mt1.5-1.8b"
-    quality_model: str = "gemma-4-e2b"
+    quality_model: str = "qwen3-4b-instruct"
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     stability: StabilityConfig = Field(default_factory=StabilityConfig)
 

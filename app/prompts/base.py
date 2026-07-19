@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.domain import ChatMessage, Conversation, TranslationTask
+from app.domain import ChatMessage, TranslationTask
 
 
 class PromptBuilder(Protocol):
@@ -19,7 +19,11 @@ class PromptBuilder(Protocol):
         ...
 
     def build_contextual(
-        self, task: TranslationTask, ctx: Conversation
+        self, task: TranslationTask, context: list[str]
     ) -> list[ChatMessage]:
-        """직전 턴 컨텍스트를 포함한 최종 번역 프롬프트."""
+        """대화 맥락(직전 턴들의 **원문** 순서열)을 포함한 최종 번역 프롬프트.
+
+        Pombal et al.(TACL 2026)의 context-aware 프레임워크를 따른다: 번역문이 아닌
+        각 참가자의 원문(x_<t)을 순서대로 주입해 대명사·생략·모호성을 해소한다.
+        """
         ...
