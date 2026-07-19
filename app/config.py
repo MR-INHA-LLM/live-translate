@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     draft_url: str = "http://127.0.0.1:8001/v1"
     quality_url: str = "http://127.0.0.1:8002/v1"
     draft_model: str = "hy-mt1.5-1.8b"
-    quality_model: str = "gemma-4-e2b"
+    quality_model: str = "qwen3-4b-instruct"
 
     # 저장 (SQLite 영속 — decisions.md D9)
     db_url: str = "sqlite+aiosqlite:///./data/app.db"
@@ -41,6 +41,6 @@ class Settings(BaseSettings):
     default_witness_langs: list[str] = ["en"]
     default_debounce_ms: int = 200
 
-    # 최종 컨텍스트(TMC) 예산
-    context_turns: int = 5
+    # 최종 컨텍스트(Pombal TACL 2026) 예산 — 6~10턴이면 대부분 충분(논문 §6.1)
+    context_turns: int = 10
     context_token_budget: int = 1024

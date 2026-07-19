@@ -22,8 +22,8 @@ from app.domain import Tier
 from app.engines.openai import VllmEngine
 from app.engines.registry import ModelRegistry
 from app.models.orm import Base
-from app.prompts.gemma import GemmaPromptBuilder
 from app.prompts.hy_mt import HyMtPromptBuilder
+from app.prompts.qwen import QwenPromptBuilder
 from app.repositories.cache import InProcessRenderingCache
 from app.repositories.sql import SqlConversationRepository, SqlSessionRepository
 from app.services.context import ContextAssembler
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     quality = VllmEngine(settings.quality_url, Tier.QUALITY, settings.engine_max_concurrency)
     registry = ModelRegistry()
     registry.register(settings.draft_model, draft, HyMtPromptBuilder(), Tier.DRAFT)
-    registry.register(settings.quality_model, quality, GemmaPromptBuilder(), Tier.QUALITY)
+    registry.register(settings.quality_model, quality, QwenPromptBuilder(), Tier.QUALITY)
 
     # 저장(SQLite) + 캐시(인메모리)
     db_engine = create_async_engine(settings.db_url)

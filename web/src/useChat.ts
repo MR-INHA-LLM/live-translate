@@ -162,6 +162,8 @@ export function useChat() {
     setSending(true);
     setText("");
     setDraft({});
+    // Pombal 컨텍스트: 직전 턴들의 원문(양측, 순서대로).
+    const context = messages.map((m) => m.source);
     try {
       let translation = "";
       let finalMs: number | undefined;
@@ -177,7 +179,7 @@ export function useChat() {
             },
           ]);
         },
-      });
+      }, context);
       if (translation) {
         await persistMessage({
           side: "mine", source, translation,
@@ -188,13 +190,14 @@ export function useChat() {
     } finally {
       setSending(false);
     }
-  }, [text, sessionId, sending, draft, tgt, witnessLang, persistMessage]);
+  }, [text, sessionId, sending, draft, tgt, witnessLang, messages, persistMessage]);
 
   const sendFromCustomer = useCallback(async () => {
     const source = custText.trim();
     if (!source || !revSessionId || custSending) return;
     setCustSending(true);
     setCustText("");
+    const context = messages.map((m) => m.source); // Pombal 컨텍스트(양측 원문)
     try {
       let translation = "";
       let finalMs: number | undefined;
@@ -213,7 +216,7 @@ export function useChat() {
             },
           ]);
         },
-      });
+      }, context);
       if (translation) {
         await persistMessage({
           side: "theirs", source, translation,
@@ -223,7 +226,7 @@ export function useChat() {
     } finally {
       setCustSending(false);
     }
-  }, [custText, revSessionId, custSending, persistMessage]);
+  }, [custText, revSessionId, custSending, messages, persistMessage]);
 
   const resetConversation = useCallback(() => {
     convId.current = null;
