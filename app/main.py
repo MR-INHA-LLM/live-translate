@@ -26,6 +26,7 @@ from app.prompts.hy_mt import HyMtPromptBuilder
 from app.prompts.qwen import QwenPromptBuilder
 from app.repositories.cache import InProcessRenderingCache
 from app.repositories.sql import SqlConversationRepository, SqlSessionRepository
+from app.services.alignment import HttpAligner
 from app.services.context import ContextAssembler
 from app.services.conversation import ConversationService
 from app.services.draft import DraftService
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     repo = SqlSessionRepository(session_factory)
     conversation_repo = SqlConversationRepository(session_factory)
+    aligner = HttpAligner(settings.align_url)
     cache = InProcessRenderingCache(settings.cache_max_entries)
 
     # 서비스
@@ -62,9 +64,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         registry=registry,
         session_repo=repo,
         conversation_repo=conversation_repo,
+        aligner=aligner,
         cache=cache,
         draft_service=DraftService(registry, cache),
-        quality_service=QualityService(registry, repo, context),
+        quality_service=QualityService(registry, repo, context, aligner),
         session_service=SessionService(repo, languages_svc),
         conversation_service=ConversationService(conversation_repo),
         language_service=languages_svc,
@@ -74,6 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await draft.aclose()
         await quality.aclose()
+        await aligner.aclose()
         await db_engine.dispose()
 
 

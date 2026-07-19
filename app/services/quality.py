@@ -21,6 +21,7 @@ from app.errors import UpstreamEngineError
 from app.repositories.base import SessionRepository
 from app.schemas.common import LatencyInfo
 from app.schemas.turn import TurnDoneEvent, TurnErrorEvent, TurnTokenEvent
+from app.services.alignment import AlignerPort
 from app.services.context import ContextAssembler
 from app.services.quality_estimation import build_confidence_spans
 
@@ -38,11 +39,13 @@ class QualityService:
     """최종 번역 + 검증(QE·역번역) + graceful degradation 유스케이스."""
 
     def __init__(
-        self, registry: ModelRegistry, repo: SessionRepository, context: ContextAssembler
+        self, registry: ModelRegistry, repo: SessionRepository, context: ContextAssembler,
+        aligner: AlignerPort | None = None,
     ) -> None:
         self._registry = registry
         self._repo = repo
         self._context = context
+        self._aligner = aligner
 
     def _messages(self, binding: EngineBinding, task: TranslationTask, context: list[str]):
         trimmed = self._context.trim(context)
@@ -135,6 +138,7 @@ class QualityService:
         confidence = build_confidence_spans(tokens, final)
 
         round_trip, round_trip_ms = await self._round_trip(session, final)
+        alignment = await self._aligner.align(text, final) if self._aligner else []
 
         await self._repo.append_turn(
             session.id, Turn(turn_id=turn_id, source=text, draft={session.tgt_lang: final}, final=final)
@@ -142,5 +146,6 @@ class QualityService:
         yield TurnDoneEvent(
             turn_id=turn_id, translation=final, degraded=degraded,
             latency=LatencyInfo(ttft_ms=acc.ttft, total_ms=llm_ms),
-            confidence=confidence, round_trip=round_trip, round_trip_ms=round_trip_ms,
+            confidence=confidence, alignment=alignment,
+            round_trip=round_trip, round_trip_ms=round_trip_ms,
         )

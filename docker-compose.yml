@@ -7,6 +7,7 @@ services:
     environment:
       DRAFT_URL: ${DRAFT_URL:-http://host.docker.internal:8001/v1}
       QUALITY_URL: ${QUALITY_URL:-http://host.docker.internal:8002/v1}   # Qwen3-4B (context-aware 최종)
+      ALIGN_URL: ${ALIGN_URL:-http://host.docker.internal:8003}          # awesome-align 정렬 서비스
       DRAFT_MODEL: hy-mt1.5-1.8b
       QUALITY_MODEL: qwen3-4b-instruct
       DB_URL: sqlite+aiosqlite:////data/app.db

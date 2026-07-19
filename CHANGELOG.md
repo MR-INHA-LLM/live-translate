@@ -6,6 +6,7 @@
 ## [Unreleased]
 
 ### ✨ Features
+- **검증(정렬)**: 구 정렬 하이라이트(awesome-align, 센터피스 D13) 배선 완료. `aligner/`(simalign, `aneuraz/awesome-align-with-co`)를 별도 호스트 프로세스(:8003)로 서빙(`serve_aligner.sh`), 게이트웨이 `HttpAligner`가 턴 확정 시 1회 호출(도달 불가 시 graceful degrade). 버블에서 **소스 구에 hover하면 대응 번역 구가 함께 강조**. QE(amber 밑줄)와 정렬(hover 배경)은 다른 시각 채널로 공존. → 검증 4종(witness·QE·역번역·정렬) 완성.
 - **검증(QE·역번역)**: 최종 턴에 두 검증 장치를 함께 계산·표시(D11/D13). **단어 QE**는 최종 스트림의 토큰 logprob를 단어 단위로 묶어 신뢰도를 내고 저신뢰 단어만 amber로 표시(다 초록으로 칠하지 않는 정직성). **역번역(round-trip)**은 최종 번역을 draft 엔진으로 원문 언어로 되돌려(tgt→src) 운영자가 의미 보존을 눈으로 확인. 버블에 초벌·LLM·역번역·확인(witness)이 각 소요시간과 함께 나란히. 값은 모두 저장·복원.
 - **quality tier**: 최종 번역을 실제 경량 LLM **Qwen3-4B-Instruct-2507** 로 서빙(단일 GPU를 draft와 공유). 더 이상 draft로 degrade하지 않아 초벌과 LLM 결과가 실제로 달라진다(예: 초벌 "move the meeting" vs LLM "reschedule the meeting"). 엔진 도달 불가 시에만 draft로 graceful degrade. 서빙은 `serve_draft.sh`·`serve_quality.sh`로 코드화.
 - **quality tier**: **Pombal et al.(TACL 2026)** 문맥 기반 번역 프레임워크 적용 — 직전 턴들의 **원문**(양측, 순서대로)을 컨텍스트로 주입해 대명사·생략·모호성을 해소. FE가 대화 원문열을 턴 요청 `context`로 전달, `QwenPromptBuilder`가 context-augmented 프롬프트 구성.
@@ -29,4 +30,4 @@
 - **tests/e2e**: 대화 저장소 CRUD(생성·추가·목록·복원·404) pytest 추가(vLLM 불필요, 순수 DB). `web/e2e-smoke.mjs`에 목록 적재·새 대화·복원 시나리오 추가.
 
 ---
-**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). ⚠️ **quality vLLM 서버 필요**: `bash serve_quality.sh`(Qwen3-4B, :8002)와 `bash serve_draft.sh`(HY-MT, :8001, util 0.30으로 낮춤)를 함께 기동. compose는 `QUALITY_URL=host.docker.internal:8002`, `QUALITY_MODEL=qwen3-4b-instruct`로 설정. quality 미기동 시 자동으로 draft degrade. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.
+**배포 노트**: gateway·nginx 이미지 재빌드 필요(`docker compose build gateway nginx && docker compose up -d gateway nginx`). ⚠️ **서빙 프로세스 3종 필요**(호스트): `bash serve_draft.sh`(HY-MT, :8001, util 0.30), `bash serve_quality.sh`(Qwen3-4B, :8002), `bash serve_aligner.sh`(awesome-align, :8003). compose는 `QUALITY_URL=host.docker.internal:8002`, `QUALITY_MODEL=qwen3-4b-instruct`, `ALIGN_URL=host.docker.internal:8003`. quality/aligner 미기동 시 각각 draft degrade / 정렬 생략으로 graceful. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.

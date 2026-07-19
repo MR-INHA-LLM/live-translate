@@ -55,6 +55,13 @@ try {
   if (!/^\d+\.\d+초$/.test(draftMs ?? "")) throw new Error("초벌 소요시간 미표시");
   if (!/^\d+\.\d+초$/.test(finalMs ?? "")) throw new Error("LLM 소요시간 미표시");
 
+  // 검증: 역번역 라인 + 구 정렬 스팬(awesome-align)이 렌더되는지
+  const roundTrip = await mineRow.locator(".trans.verify").first().textContent();
+  const alignN = await mineRow.locator(".orig .al").count();
+  console.log("역번역/확인 라인:", roundTrip?.slice(0, 40), "· 정렬 스팬:", alignN);
+  if (!roundTrip || roundTrip.length < 5) throw new Error("역번역/검증 라인 없음");
+  if (alignN < 1) throw new Error("구 정렬 스팬 미표시(정렬 서비스 확인)");
+
   // 고객(태블릿)이 자기 화면에서 입력 → 운영자 작업대에 theirs 로 역번역 수신
   const beforeTheirs = await page.locator(".work .row.theirs").count();
   await page.fill(".customer .device .dfield", "Can you move the meeting to Friday afternoon?");
