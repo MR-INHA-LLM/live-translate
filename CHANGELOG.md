@@ -6,6 +6,7 @@
 ## [Unreleased]
 
 ### ✨ Features
+- **web/console**: 시연용 **대화 시나리오(자유 칩 풀)** — 발표자가 무엇을 칠지 막힐 때 쓰는 편집 가능한 시드 칩. 시나리오(회의 일정/환불/배송) 선택 후 운영자 작성창엔 한국어 시드, 고객 태블릿엔 영어 시드가 칩으로 뜨고, 클릭하면 입력창을 채운다(자동 전송 X, 수정 후 전송). **번역은 항상 실시간** 수행이라 "미리 번역된 것처럼" 보이지 않는다.
 - **검증(정렬)**: 구 정렬 하이라이트(awesome-align, 센터피스 D13) 배선 완료. `aligner/`(simalign, `aneuraz/awesome-align-with-co`)를 별도 호스트 프로세스(:8003)로 서빙(`serve_aligner.sh`), 게이트웨이 `HttpAligner`가 턴 확정 시 1회 호출(도달 불가 시 graceful degrade). 버블에서 **소스 구에 hover하면 대응 번역 구가 함께 강조**. QE(amber 밑줄)와 정렬(hover 배경)은 다른 시각 채널로 공존. → 검증 4종(witness·QE·역번역·정렬) 완성.
 - **검증(QE·역번역)**: 최종 턴에 두 검증 장치를 함께 계산·표시(D11/D13). **단어 QE**는 최종 스트림의 토큰 logprob를 단어 단위로 묶어 신뢰도를 내고 저신뢰 단어만 amber로 표시(다 초록으로 칠하지 않는 정직성). **역번역(round-trip)**은 최종 번역을 draft 엔진으로 원문 언어로 되돌려(tgt→src) 운영자가 의미 보존을 눈으로 확인. 버블에 초벌·LLM·역번역·확인(witness)이 각 소요시간과 함께 나란히. 값은 모두 저장·복원.
 - **quality tier**: 최종 번역을 실제 경량 LLM **Qwen3-4B-Instruct-2507** 로 서빙(단일 GPU를 draft와 공유). 더 이상 draft로 degrade하지 않아 초벌과 LLM 결과가 실제로 달라진다(예: 초벌 "move the meeting" vs LLM "reschedule the meeting"). 엔진 도달 불가 시에만 draft로 graceful degrade. 서빙은 `serve_draft.sh`·`serve_quality.sh`로 코드화.

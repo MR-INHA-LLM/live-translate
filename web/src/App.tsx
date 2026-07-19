@@ -1,11 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "./useChat";
 import { Bubble } from "./Bubble";
+import { SCENARIOS } from "./scenarios";
 
 export default function App() {
   const c = useChat();
   const feedRef = useRef<HTMLDivElement>(null);
   const custRef = useRef<HTMLDivElement>(null);
+  const [scIdx, setScIdx] = useState(0);
+  const scenario = SCENARIOS[scIdx];
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
@@ -87,6 +90,32 @@ export default function App() {
         </div>
 
         <div className="composer">
+          <div className="seedbar">
+            <div className="scenpick">
+              <span className="slab">시나리오</span>
+              {SCENARIOS.map((s, i) => (
+                <button
+                  key={s.id}
+                  className={`schip ${i === scIdx ? "on" : ""}`}
+                  onClick={() => setScIdx(i)}
+                >
+                  {s.title}
+                </button>
+              ))}
+            </div>
+            <div className="seeds">
+              {scenario.mine.map((s, i) => (
+                <button
+                  key={i}
+                  className="seed"
+                  title="입력창에 넣기 (수정 후 전송)"
+                  onClick={() => c.onInput(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
           {(draftTgt || draftWit) && (
             <div className="draftprev">
               {draftTgt && <span><span className="lab">초벌 {c.tgt}</span>{draftTgt}</span>}
@@ -128,6 +157,13 @@ export default function App() {
               <div key={m.id} className={`crow ${m.side === "mine" ? "in" : "out"}`}>
                 <div className="cbubble">{m.side === "mine" ? m.translation : m.source}</div>
               </div>
+            ))}
+          </div>
+          <div className="seeds cust">
+            {scenario.theirs.map((s, i) => (
+              <button key={i} className="seed" onClick={() => c.setCustText(s)}>
+                {s}
+              </button>
             ))}
           </div>
           <div className="dcompose">
