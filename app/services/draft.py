@@ -30,12 +30,15 @@ class DraftService:
             return
         targets = session.target_langs()
         key = cache_key(session.draft_model, session.src_lang, ",".join(targets), norm)
+        t0 = time.perf_counter()
         if (hit := self._cache.get(key)) is not None:
-            yield RevisionUpdate(rev.id, hit, cached=True)
+            # 캐시 히트도 소요를 보고한다(≈0ms) — UI가 "초벌은 항상 빠르다"를 정직히 보이도록.
+            yield RevisionUpdate(
+                rev.id, hit, total_ms=(time.perf_counter() - t0) * 1000, cached=True
+            )
             return
 
         binding = self._registry.resolve(session.draft_model)
-        t0 = time.perf_counter()
 
         async def one(lang: str) -> tuple[str, Rendering, float | None]:
             task = TranslationTask(session.src_lang, lang, norm)

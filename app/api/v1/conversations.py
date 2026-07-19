@@ -26,7 +26,8 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 def _to_message_read(m: StoredMessage) -> MessageRead:
     return MessageRead(
         seq=m.seq, side=m.side, source=m.source,  # type: ignore[arg-type]
-        translation=m.translation, witness=m.witness,
+        translation=m.translation, draft=m.draft, witness=m.witness,
+        draft_ms=m.draft_ms, final_ms=m.final_ms,
     )
 
 
@@ -88,7 +89,8 @@ async def add_message(
     """대화에 확정 메시지를 추가한다."""
     stored = await svc.add_message(
         conversation_id,
-        StoredMessage(side=body.side, source=body.source,
-                      translation=body.translation, witness=body.witness),
+        StoredMessage(side=body.side, source=body.source, translation=body.translation,
+                      draft=body.draft, witness=body.witness,
+                      draft_ms=body.draft_ms, final_ms=body.final_ms),
     )
     return _to_message_read(stored)

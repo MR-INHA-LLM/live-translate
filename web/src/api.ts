@@ -52,7 +52,19 @@ export interface StoredMessage {
   side: "mine" | "theirs";
   source: string;
   translation: string;
+  draft: string | null;
   witness: string | null;
+  draft_ms: number | null;
+  final_ms: number | null;
+}
+export interface MessageInput {
+  side: "mine" | "theirs";
+  source: string;
+  translation: string;
+  draft: string | null;
+  witness: string | null;
+  draft_ms: number | null;
+  final_ms: number | null;
 }
 export interface ConversationDetail {
   conversation_id: string;
@@ -88,10 +100,7 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
   return r.json();
 }
 
-export async function addMessage(
-  id: string,
-  body: { side: "mine" | "theirs"; source: string; translation: string; witness: string | null },
-): Promise<void> {
+export async function addMessage(id: string, body: MessageInput): Promise<void> {
   const r = await fetch(`${API_BASE}/api/v1/conversations/${id}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

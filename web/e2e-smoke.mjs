@@ -45,11 +45,15 @@ try {
     before,
     { timeout: 40000 },
   );
-  const trans = (await page.locator(".work .row.mine").last().locator(".trans").textContent())
-    ?.replace(/^→ \w+/, "").trim();
+  const mineRow = page.locator(".work .row.mine").last();
+  const draftMs = (await mineRow.locator(".trans.draft .ms").textContent())?.trim();
+  const finalMs = (await mineRow.locator(".trans.final .ms").textContent())?.trim();
+  const trans = (await mineRow.locator(".trans.final").textContent())?.trim();
   const cust = (await page.locator(".customer .cbubble").last().textContent())?.trim();
-  console.log("작업대 번역:", trans);
+  console.log("작업대 초벌 소요:", draftMs, "· LLM 소요:", finalMs);
   console.log("고객 화면:", cust);
+  if (!/^\d+\.\d+초$/.test(draftMs ?? "")) throw new Error("초벌 소요시간 미표시");
+  if (!/^\d+\.\d+초$/.test(finalMs ?? "")) throw new Error("LLM 소요시간 미표시");
 
   // 고객(태블릿)이 자기 화면에서 입력 → 운영자 작업대에 theirs 로 역번역 수신
   const beforeTheirs = await page.locator(".work .row.theirs").count();
@@ -60,8 +64,8 @@ try {
     beforeTheirs,
     { timeout: 40000 },
   );
-  const inbound = (await page.locator(".work .row.theirs").last().locator(".trans").textContent())
-    ?.replace(/^→ \w+/, "").trim();
+  const inbound = (await page.locator(".work .row.theirs").last().locator(".trans.final").textContent())
+    ?.trim();
   console.log("고객→운영자 역번역:", inbound);
 
   // 세션 저장소: 방금 대화가 좌측 목록에 저장되고, 새 대화→복원이 되는지
