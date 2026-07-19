@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # tier별 vLLM (OpenAI 호환) 엔드포인트
     draft_url: str = "http://127.0.0.1:8001/v1"
     quality_url: str = "http://127.0.0.1:8002/v1"
+    align_url: str = "http://127.0.0.1:8003"  # awesome-align 정렬 서비스(별도 프로세스)
     draft_model: str = "hy-mt1.5-1.8b"
     quality_model: str = "qwen3-4b-instruct"
 

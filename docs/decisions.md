@@ -282,3 +282,20 @@ M1까지 quality tier를 draft(HY-MT)로 degrade해 두었으나(초벌==최종�
 - **실측**: `그거 금요일까지 보내주세요` → quality "Please send that by Friday"(정상) vs
   draft "Please keep that until Friday"(오역). 초벌 "move the meeting" vs LLM "reschedule
   the meeting"처럼 두 tier가 실제로 다른 출력을 낸다. 동음이의어 완전 해소는 4B 용량 한계.
+
+### D16. 검증 스위트 완성 — 정렬 서비스는 별도 호스트 프로세스
+
+D13에서 정렬 센터피스로 awesome-align을 확정했고, 이제 검증 4종(witness·QE·역번역·
+정렬)을 모두 배선한다.
+
+- **정렬 서비스 분리**: transformers/torch가 vLLM·COMET과 충돌(D7)하므로 게이트웨이와
+  별도 프로세스로 띄운다. 컨테이너 대신 프로젝트 `.venv`(simalign 포함)로 **호스트
+  프로세스(:8003)** 로 서빙 — vLLM(:8001/:8002)과 동일한 배치라 일관적이고 torch 이미지
+  빌드가 불필요. `aligner/app.py`(FastAPI) + `serve_aligner.sh`. 모델
+  `aneuraz/awesome-align-with-co`는 HF 캐시에 이미 존재.
+- **호출·정직성**: 게이트웨이 `HttpAligner`가 턴 확정 시 1회 호출(초벌 핫패스 아님).
+  도달 불가/타임아웃이면 빈 목록으로 **graceful degrade** — 정렬은 보조 시각 장치라
+  없어도 번역은 성립. 어절 단위 정렬 → 문자 오프셋 스팬, 구두점-only 대응은 제거.
+- **QE + 정렬 공존**: 최종 번역 줄에서 QE(저신뢰 amber 밑줄)와 정렬(hover 배경 강조)을
+  **다른 시각 채널**로 겹쳐 렌더(서로 간섭 없음). 소스 구에 hover하면 대응 번역 구가
+  같이 강조된다.

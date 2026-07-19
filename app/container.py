@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from app.engines.registry import ModelRegistry
 from app.repositories.base import ConversationRepository, SessionRepository
 from app.repositories.cache import RenderingCache
+from app.services.alignment import AlignerPort
 from app.services.conversation import ConversationService
 from app.services.draft import DraftService
 from app.services.language import LanguageService
@@ -25,6 +26,7 @@ class Container:
     registry: ModelRegistry
     session_repo: SessionRepository
     conversation_repo: ConversationRepository
+    aligner: AlignerPort
     cache: RenderingCache
     draft_service: DraftService
     quality_service: QualityService
