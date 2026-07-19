@@ -42,10 +42,12 @@ async def test_conversation_store_crud(server: str) -> None:
         # 양측 메시지 추가 — seq 자동 부여. 초벌·검증·소요시간까지 왕복 보존.
         r = await c.post(f"/api/v1/conversations/{cid}/messages",
                          json={"side": "mine", "source": "안녕하세요", "translation": "Hello",
-                               "draft": "Hi", "witness": "Halo",
-                               "draft_ms": 210.5, "final_ms": 1850.0})
+                               "draft": "Hi", "witness": "Halo", "round_trip": "안녕",
+                               "confidence": [{"tgt_start": 0, "tgt_end": 5, "prob": 0.9, "low": False}],
+                               "draft_ms": 210.5, "final_ms": 1850.0, "round_trip_ms": 90.0})
         assert r.status_code == 201 and r.json()["seq"] == 0
         assert r.json()["draft"] == "Hi" and r.json()["draft_ms"] == 210.5
+        assert r.json()["round_trip"] == "안녕" and r.json()["confidence"][0]["prob"] == 0.9
         r = await c.post(f"/api/v1/conversations/{cid}/messages",
                          json={"side": "theirs", "source": "Can you help?",
                                "translation": "도와주실 수 있나요?"})
@@ -65,6 +67,8 @@ async def test_conversation_store_crud(server: str) -> None:
         assert msgs[1]["translation"] == "도와주실 수 있나요?"
         assert msgs[0]["draft"] == "Hi" and msgs[0]["witness"] == "Halo"
         assert msgs[0]["draft_ms"] == 210.5 and msgs[0]["final_ms"] == 1850.0
+        assert msgs[0]["round_trip"] == "안녕" and msgs[0]["round_trip_ms"] == 90.0
+        assert msgs[0]["confidence"][0]["low"] is False
 
         # 삭제 → 목록에서 사라지고, 재조회 404
         assert (await c.delete(f"/api/v1/conversations/{cid}")).status_code == 204

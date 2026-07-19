@@ -30,3 +30,6 @@ dev = [
     "websockets>=16.1",
 ]
 # vLLM installed into the same env in a later step (heavy)
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

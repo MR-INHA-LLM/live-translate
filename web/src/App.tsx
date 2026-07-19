@@ -1,5 +1,30 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useChat } from "./useChat";
+import type { ConfidenceSpan } from "./api";
+
+// 단어 QE: 저신뢰(low) 구간만 amber로 칠한다(정직성 — 다 초록으로 칠하지 않음, D11).
+function renderConfidence(text: string, spans?: ConfidenceSpan[]): ReactNode {
+  if (!spans || spans.length === 0) return text;
+  const out: ReactNode[] = [];
+  let i = 0;
+  for (const s of [...spans].sort((a, b) => a.tgt_start - b.tgt_start)) {
+    if (s.tgt_start < i || s.tgt_start >= text.length) continue;
+    if (s.tgt_start > i) out.push(text.slice(i, s.tgt_start));
+    const w = text.slice(s.tgt_start, s.tgt_end);
+    out.push(
+      <span
+        key={s.tgt_start}
+        className={`qe${s.low ? " low" : ""}`}
+        title={`신뢰도 ${Math.round(s.prob * 100)}%`}
+      >
+        {w}
+      </span>,
+    );
+    i = s.tgt_end;
+  }
+  if (i < text.length) out.push(text.slice(i));
+  return out;
+}
 
 export default function App() {
   const c = useChat();
@@ -102,12 +127,21 @@ export default function App() {
                       LLM {transLang}
                       {m.finalMs != null && <span className="ms">{secs(m.finalMs)}</span>}
                     </span>
-                    {m.translation}
+                    {renderConfidence(m.translation, m.confidence)}
                   </div>
+                  {m.roundTrip && (
+                    <div className="trans verify">
+                      <span className="lab">
+                        역번역 {m.side === "mine" ? c.src : c.tgt}
+                        {m.roundTripMs != null && <span className="ms">{secs(m.roundTripMs)}</span>}
+                      </span>
+                      {m.roundTrip}
+                    </div>
+                  )}
                   {m.witness && (
                     <div className="trans verify">
                       <span className="lab">
-                        검증 {c.witnessLang}
+                        확인 {c.witnessLang}
                         {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
                       </span>
                       {m.witness}

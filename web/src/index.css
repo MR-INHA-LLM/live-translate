@@ -97,6 +97,9 @@ body { margin:0; font-family:var(--sans); color:var(--ink); overflow:hidden;
 .trans.draft { color:var(--draft); }
 .trans.final { color:var(--ink); font-weight:520; }
 .trans.verify { color:var(--faint); font-style:italic; }
+/* 단어 QE — 저신뢰 구간만 amber(불확실 표시). 고신뢰는 칠하지 않음(D11 정직성). */
+.qe.low { background:rgba(214,158,46,.22); border-bottom:2px solid #d69e2e; border-radius:3px;
+  padding:0 1px; cursor:help; }
 
 .composer { border-top:1px solid var(--line); padding:14px 16px; background:var(--panel); flex:0 0 auto; }
 .draftprev { font-size:.95rem; color:var(--draft); margin:0 2px 10px; display:flex;

@@ -82,8 +82,12 @@ class MessageRow(Base):
     draft: Mapped[str | None] = mapped_column(Text, nullable=True)  # 초벌(빠른) 번역
     translation: Mapped[str] = mapped_column(Text)  # LLM(최종) 번역
     witness: Mapped[str | None] = mapped_column(Text, nullable=True)  # 검증(확인용 언어)
+    round_trip: Mapped[str | None] = mapped_column(Text, nullable=True)  # 역번역(tgt→src)
+    confidence: Mapped[list | None] = mapped_column(JSON, nullable=True)  # 단어 QE 스팬
+    alignment: Mapped[list | None] = mapped_column(JSON, nullable=True)  # 구 정렬 스팬
     draft_ms: Mapped[float | None] = mapped_column(Float, nullable=True)  # 초벌·검증 소요(ms)
     final_ms: Mapped[float | None] = mapped_column(Float, nullable=True)  # LLM 소요(ms)
+    round_trip_ms: Mapped[float | None] = mapped_column(Float, nullable=True)  # 역번역 소요(ms)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     conversation: Mapped[ConversationRow] = relationship(back_populates="messages")

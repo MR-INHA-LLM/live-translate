@@ -26,8 +26,9 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 def _to_message_read(m: StoredMessage) -> MessageRead:
     return MessageRead(
         seq=m.seq, side=m.side, source=m.source,  # type: ignore[arg-type]
-        translation=m.translation, draft=m.draft, witness=m.witness,
-        draft_ms=m.draft_ms, final_ms=m.final_ms,
+        translation=m.translation, draft=m.draft, witness=m.witness, round_trip=m.round_trip,
+        confidence=m.confidence, alignment=m.alignment,
+        draft_ms=m.draft_ms, final_ms=m.final_ms, round_trip_ms=m.round_trip_ms,
     )
 
 
@@ -90,7 +91,9 @@ async def add_message(
     stored = await svc.add_message(
         conversation_id,
         StoredMessage(side=body.side, source=body.source, translation=body.translation,
-                      draft=body.draft, witness=body.witness,
-                      draft_ms=body.draft_ms, final_ms=body.final_ms),
+                      draft=body.draft, witness=body.witness, round_trip=body.round_trip,
+                      confidence=body.confidence, alignment=body.alignment,
+                      draft_ms=body.draft_ms, final_ms=body.final_ms,
+                      round_trip_ms=body.round_trip_ms),
     )
     return _to_message_read(stored)

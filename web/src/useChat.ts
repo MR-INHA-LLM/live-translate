@@ -9,6 +9,8 @@ import {
   listConversations,
   openDraftSocket,
   streamTurn,
+  type AlignmentSpan,
+  type ConfidenceSpan,
   type ConversationSummary,
   type DraftResponse,
   type LanguageCatalog,
@@ -22,8 +24,12 @@ export interface ChatMessage {
   translation: string; // LLM(최종) 번역
   draft?: string; // 초벌(빠른) 번역
   witness?: string; // 검증(확인용 언어)
+  roundTrip?: string; // 역번역(tgt→src)
+  confidence?: ConfidenceSpan[]; // 단어 QE
+  alignment?: AlignmentSpan[]; // 구 정렬
   draftMs?: number; // 초벌·검증 소요(ms)
   finalMs?: number; // LLM 소요(ms)
+  roundTripMs?: number; // 역번역 소요(ms)
 }
 
 const DEBOUNCE_MS = 200; // 초벌 발사 전 대기 (StabilityConfig.debounce_ms 기본과 동일)
@@ -167,8 +173,10 @@ export function useChat() {
     try {
       let translation = "";
       let finalMs: number | undefined;
+      let done_: import("./api").TurnDone | undefined;
       await streamTurn(sessionId, source, {
         onDone: (done) => {
+          done_ = done;
           translation = done.translation;
           finalMs = done.latency.total_ms ?? done.latency.ttft_ms ?? undefined;
           setMessages((m) => [
@@ -176,6 +184,9 @@ export function useChat() {
             {
               id: `m-${done.turn_id}-${Date.now()}`, side: "mine", source, translation,
               draft: draftText, witness, draftMs, finalMs,
+              roundTrip: done.round_trip ?? undefined,
+              confidence: done.confidence, alignment: done.alignment,
+              roundTripMs: done.round_trip_ms ?? undefined,
             },
           ]);
         },
@@ -184,7 +195,10 @@ export function useChat() {
         await persistMessage({
           side: "mine", source, translation,
           draft: draftText ?? null, witness: witness ?? null,
+          round_trip: done_?.round_trip ?? null,
+          confidence: done_?.confidence ?? null, alignment: done_?.alignment ?? null,
           draft_ms: draftMs ?? null, final_ms: finalMs ?? null,
+          round_trip_ms: done_?.round_trip_ms ?? null,
         });
       }
     } finally {
@@ -201,8 +215,10 @@ export function useChat() {
     try {
       let translation = "";
       let finalMs: number | undefined;
+      let done_: import("./api").TurnDone | undefined;
       await streamTurn(revSessionId, source, {
         onDone: (done) => {
+          done_ = done;
           translation = done.translation; // 운영자 언어(src)로 번역
           finalMs = done.latency.total_ms ?? done.latency.ttft_ms ?? undefined;
           setMessages((m) => [
@@ -213,6 +229,9 @@ export function useChat() {
               source, // 고객이 입력한 원문(tgt 언어)
               translation,
               finalMs,
+              roundTrip: done.round_trip ?? undefined,
+              confidence: done.confidence, alignment: done.alignment,
+              roundTripMs: done.round_trip_ms ?? undefined,
             },
           ]);
         },
@@ -220,7 +239,11 @@ export function useChat() {
       if (translation) {
         await persistMessage({
           side: "theirs", source, translation,
-          draft: null, witness: null, draft_ms: null, final_ms: finalMs ?? null,
+          draft: null, witness: null,
+          round_trip: done_?.round_trip ?? null,
+          confidence: done_?.confidence ?? null, alignment: done_?.alignment ?? null,
+          draft_ms: null, final_ms: finalMs ?? null,
+          round_trip_ms: done_?.round_trip_ms ?? null,
         });
       }
     } finally {
@@ -258,8 +281,12 @@ export function useChat() {
           translation: m.translation,
           draft: m.draft ?? undefined,
           witness: m.witness ?? undefined,
+          roundTrip: m.round_trip ?? undefined,
+          confidence: m.confidence ?? undefined,
+          alignment: m.alignment ?? undefined,
           draftMs: m.draft_ms ?? undefined,
           finalMs: m.final_ms ?? undefined,
+          roundTripMs: m.round_trip_ms ?? undefined,
         })),
       );
       setSrc(detail.src_lang);
