@@ -39,6 +39,8 @@ class TurnDoneEvent(ApiModel):
     latency: LatencyInfo = LatencyInfo()
     alignment: list[AlignmentSpan] = []  # awesome-align, 턴당 1회
     confidence: list[ConfidenceSpan] = []  # token logprob 파생 QE
+    round_trip: str | None = None  # 역번역(tgt→src, draft 엔진)
+    round_trip_ms: float | None = None
 
 
 class TurnErrorEvent(ApiModel):

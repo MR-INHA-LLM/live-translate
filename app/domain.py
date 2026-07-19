@@ -140,8 +140,12 @@ class StoredMessage:
     translation: str  # LLM(최종) 번역
     draft: str | None = None  # 초벌(빠른) 번역
     witness: str | None = None  # 검증(확인용 언어)
+    round_trip: str | None = None  # 역번역(tgt→src)
+    confidence: list | None = None  # 단어 QE 스팬
+    alignment: list | None = None  # 구 정렬 스팬
     draft_ms: float | None = None  # 초벌·검증 소요(ms)
     final_ms: float | None = None  # LLM 소요(ms)
+    round_trip_ms: float | None = None  # 역번역 소요(ms)
     seq: int = 0
 
 

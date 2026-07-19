@@ -32,8 +32,12 @@ class MessageCreate(ApiRequest):
     translation: str = Field(min_length=1)  # LLM(최종) 번역
     draft: str | None = None  # 초벌(빠른) 번역
     witness: str | None = None  # 검증(확인용 언어)
+    round_trip: str | None = None  # 역번역(tgt→src)
+    confidence: list | None = None  # 단어 QE 스팬
+    alignment: list | None = None  # 구 정렬 스팬
     draft_ms: float | None = Field(None, ge=0)  # 초벌·검증 소요(ms)
     final_ms: float | None = Field(None, ge=0)  # LLM 소요(ms)
+    round_trip_ms: float | None = Field(None, ge=0)  # 역번역 소요(ms)
 
 
 class MessageRead(ApiModel):
@@ -45,8 +49,12 @@ class MessageRead(ApiModel):
     translation: str
     draft: str | None = None
     witness: str | None = None
+    round_trip: str | None = None
+    confidence: list | None = None
+    alignment: list | None = None
     draft_ms: float | None = None
     final_ms: float | None = None
+    round_trip_ms: float | None = None
 
 
 class ConversationCreated(ApiModel):

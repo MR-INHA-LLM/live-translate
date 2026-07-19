@@ -117,8 +117,10 @@ class SqlConversationRepository:
             )
             messages = [
                 StoredMessage(side=m.side, source=m.source, translation=m.translation,
-                              draft=m.draft, witness=m.witness,
-                              draft_ms=m.draft_ms, final_ms=m.final_ms, seq=m.seq)
+                              draft=m.draft, witness=m.witness, round_trip=m.round_trip,
+                              confidence=m.confidence, alignment=m.alignment,
+                              draft_ms=m.draft_ms, final_ms=m.final_ms,
+                              round_trip_ms=m.round_trip_ms, seq=m.seq)
                 for m in res.scalars().all()
             ]
             return ConversationDetail(
@@ -140,13 +142,18 @@ class SqlConversationRepository:
             s.add(MessageRow(
                 conversation_id=conv_id, seq=seq, side=message.side,
                 source=message.source, draft=message.draft, translation=message.translation,
-                witness=message.witness, draft_ms=message.draft_ms, final_ms=message.final_ms,
+                witness=message.witness, round_trip=message.round_trip,
+                confidence=message.confidence, alignment=message.alignment,
+                draft_ms=message.draft_ms, final_ms=message.final_ms,
+                round_trip_ms=message.round_trip_ms,
             ))
             await s.commit()
             return StoredMessage(
                 side=message.side, source=message.source, translation=message.translation,
-                draft=message.draft, witness=message.witness,
-                draft_ms=message.draft_ms, final_ms=message.final_ms, seq=seq,
+                draft=message.draft, witness=message.witness, round_trip=message.round_trip,
+                confidence=message.confidence, alignment=message.alignment,
+                draft_ms=message.draft_ms, final_ms=message.final_ms,
+                round_trip_ms=message.round_trip_ms, seq=seq,
             )
 
     async def delete(self, conv_id: str) -> bool:

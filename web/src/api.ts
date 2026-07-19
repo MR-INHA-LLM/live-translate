@@ -30,11 +30,27 @@ export interface DraftResponse {
   renderings: Record<string, string>;
   latency: { ttft_ms: number | null; total_ms: number | null };
 }
+export interface ConfidenceSpan {
+  tgt_start: number;
+  tgt_end: number;
+  prob: number;
+  low: boolean;
+}
+export interface AlignmentSpan {
+  src_start: number;
+  src_end: number;
+  tgt_start: number;
+  tgt_end: number;
+}
 export interface TurnDone {
   turn_id: number;
   translation: string;
   degraded: boolean;
   latency: { ttft_ms: number | null; total_ms: number | null };
+  confidence: ConfidenceSpan[];
+  alignment: AlignmentSpan[];
+  round_trip: string | null;
+  round_trip_ms: number | null;
 }
 
 // --- 대화 저장소 (DB 영구 저장 이력) ---
@@ -54,8 +70,12 @@ export interface StoredMessage {
   translation: string;
   draft: string | null;
   witness: string | null;
+  round_trip: string | null;
+  confidence: ConfidenceSpan[] | null;
+  alignment: AlignmentSpan[] | null;
   draft_ms: number | null;
   final_ms: number | null;
+  round_trip_ms: number | null;
 }
 export interface MessageInput {
   side: "mine" | "theirs";
@@ -63,8 +83,12 @@ export interface MessageInput {
   translation: string;
   draft: string | null;
   witness: string | null;
+  round_trip: string | null;
+  confidence: ConfidenceSpan[] | null;
+  alignment: AlignmentSpan[] | null;
   draft_ms: number | null;
   final_ms: number | null;
+  round_trip_ms: number | null;
 }
 export interface ConversationDetail {
   conversation_id: string;
