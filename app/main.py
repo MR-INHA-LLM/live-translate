@@ -42,10 +42,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # 엔진(vLLM OpenAI 호환 클라이언트) + 프롬프트 전략 → 레지스트리
     draft = VllmEngine(settings.draft_url, Tier.DRAFT, settings.engine_max_concurrency)
-    quality = VllmEngine(settings.quality_url, Tier.QUALITY, settings.engine_max_concurrency)
     registry = ModelRegistry()
     registry.register(settings.draft_model, draft, HyMtPromptBuilder(), Tier.DRAFT)
-    registry.register(settings.quality_model, quality, QwenPromptBuilder(), Tier.QUALITY)
+    # quality tier: 꺼져 있으면 미등록 → 최종 번역이 draft로 degrade(CPU 배포 등).
+    quality = None
+    if settings.quality_enabled:
+        quality = VllmEngine(settings.quality_url, Tier.QUALITY, settings.engine_max_concurrency)
+        registry.register(settings.quality_model, quality, QwenPromptBuilder(), Tier.QUALITY)
 
     # 저장(SQLite) + 캐시(인메모리)
     db_engine = create_async_engine(settings.db_url)
@@ -76,7 +79,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await draft.aclose()
-        await quality.aclose()
+        if quality is not None:
+            await quality.aclose()
         await aligner.aclose()
         await db_engine.dispose()
 

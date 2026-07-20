@@ -99,11 +99,12 @@
 요구사항·GPU 배치·기동 명령·환경 플래그는 [`docs/serving.md`](docs/serving.md).
 
 ```bash
-bash bench/serve_draft.sh          # draft tier (:8001)
-# quality tier (:8002) — docs/serving.md
-uv sync && uv run uvicorn app.main:app --port 8000
-cd web && pnpm install && pnpm dev # 데모
+# 전체 스택 한 번에 (vLLM draft·quality + gateway + nginx). 정렬은 호스트 프로세스.
+docker compose --profile gpu up      # http://localhost:18090
+bash serve_aligner.sh                # 구 정렬 서비스 (:8003)
 ```
+
+호스트에서 vLLM을 직접 띄우려면 `serve_draft.sh`·`serve_quality.sh`(+ `DRAFT_URL`/`QUALITY_URL` override).
 
 ---
 
