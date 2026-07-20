@@ -30,6 +30,8 @@
 - **web/console (CPU 모드 대비)**: quality 미가용(`degraded`)이면 초벌==최종이라 버블을 **단일 "번역" 줄**로 접는다(초벌/LLM 이중 표기 제거). GPU가 있으면 기존대로 초벌·LLM 분리.
 
 ### 🔧 Infra / Ops
+- **cpu 배포 프로파일**: GPU 없는 환경용 `docker compose --profile cpu up` — `cpu_server/`(transformers 기반 OpenAI 호환 draft 서버, HunYuan 네이티브)를 컨테이너로 띄우고 quality는 끈다(`QUALITY_ENABLED=false` → 최종을 draft로 degrade, 버블 단일 "번역" 줄). 생성은 `_gen_lock`으로 직렬화(CPU 단일 모델), sync 제너레이터로 이벤트 루프 비블로킹, generate 실패 시 streamer 강제 종료(데드락 방지). 호스트 대안 `serve_draft_cpu.sh`. 설정 플래그 `quality_enabled`.
+- **cleanup**: 미참조 `web/public/icons.svg`, 루트 `serve_draft.sh`와 중복이던 `bench/serve_draft.sh` 제거(README·docs/serving.md 참조를 루트 스크립트/도커로 갱신).
 - **compose**: vLLM 두 tier(draft·quality)를 **도커화** — `vllm/vllm-openai` 이미지로 `vllm-draft`·`vllm-quality` 서비스 추가, 로컬 `./models`를 마운트해 재다운로드 없이 로드, GPU 예약(`deploy.resources … nvidia`), healthcheck 포함. 이제 **`docker compose --profile gpu up` 한 번**으로 vLLM+gateway+nginx 전체 기동(정렬은 호스트 :8003 유지). gateway `DRAFT_URL`/`QUALITY_URL` 기본값을 컨테이너 서비스명으로 변경(호스트 vLLM은 env override). 전제: `nvidia-container-toolkit` 설치.
 
 ### ♻️ Refactor

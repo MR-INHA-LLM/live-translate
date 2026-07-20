@@ -32,8 +32,23 @@ vllm serve tencent/HY-MT1.5-7B-FP8 \
   --gpu-memory-utilization 0.55
 ```
 
-로컬 draft 검증용 런처는 [`../bench/serve_draft.sh`](../bench/serve_draft.sh)에 있다
-(bf16 원본 모델 + 아래 WSL2 플래그 포함).
+호스트 런처는 저장소 루트의 [`../serve_draft.sh`](../serve_draft.sh)·
+[`../serve_quality.sh`](../serve_quality.sh)에 있다(bf16 원본 모델 + 아래 WSL2 플래그 포함).
+도커로 띄우려면 `docker compose --profile gpu up`.
+
+## CPU 배포 (GPU 없음)
+
+vLLM CUDA 이미지는 CPU 서빙이 안 되므로, GPU-less 환경에서는 초벌(draft)만 경량
+transformers 서버(`cpu_server/`)로 CPU에서 돌리고 quality tier는 끈다.
+
+```bash
+QUALITY_ENABLED=false DRAFT_URL=http://draft-cpu:8000/v1 docker compose --profile cpu up
+```
+
+quality가 꺼지면 최종 번역은 draft로 degrade하고(`degraded=True`) UI 버블은 단일
+"번역" 줄로 접힌다. 초벌 CPU 지연은 짧은 문장 ~1.5s(실측 [`../bench/draft_cpu_gpu.py`](../bench/draft_cpu_gpu.py),
+GPU 대비 ~6-7배). 도커 없이 호스트에서 돌리려면 `serve_draft_cpu.sh`(:8001) +
+게이트웨이 `QUALITY_ENABLED=false`.
 
 ## GPU 2장 배치
 
@@ -49,7 +64,7 @@ vllm serve tencent/HY-MT1.5-7B-FP8 \
 ## WSL2 필수 플래그
 
 WSL2 + CUDA 툴킷(nvcc) 미설치 환경에서는 아래가 없으면 엔진 초기화 단계에서 죽는다
-(M0에서 확인). `bench/serve_draft.sh`에 반영되어 있다.
+(M0에서 확인). `serve_draft.sh`·`serve_quality.sh`에 반영되어 있다.
 
 ```bash
 export VLLM_WSL2_ENABLE_PIN_MEMORY=1   # 없으면 "UVA is not available"로 종료

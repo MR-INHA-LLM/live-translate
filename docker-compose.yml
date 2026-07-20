@@ -11,6 +11,7 @@ services:
       ALIGN_URL: ${ALIGN_URL:-http://host.docker.internal:8003}          # 정렬은 호스트 프로세스
       DRAFT_MODEL: hy-mt1.5-1.8b
       QUALITY_MODEL: qwen3-4b-instruct
+      QUALITY_ENABLED: ${QUALITY_ENABLED:-true}   # CPU 배포: false → 최종을 draft로 degrade
       DB_URL: sqlite+aiosqlite:////data/app.db
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:18090"]'
     extra_hosts:
@@ -82,6 +83,22 @@ services:
       retries: 20
       start_period: 120s
     deploy: *vllm_gpu
+
+  # GPU 없는 환경용 CPU draft 서버 (transformers). quality는 끄고 draft만.
+  #   QUALITY_ENABLED=false DRAFT_URL=http://draft-cpu:8000/v1 docker compose --profile cpu up
+  draft-cpu:
+    build:
+      context: .
+      dockerfile: cpu_server/Dockerfile
+    profiles: ["cpu"]
+    volumes:
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
 volumes:
   gateway-data:

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     align_url: str = "http://127.0.0.1:8003"  # awesome-align 정렬 서비스(별도 프로세스)
     draft_model: str = "hy-mt1.5-1.8b"
     quality_model: str = "qwen3-4b-instruct"
+    # CPU 배포 등에서 quality tier를 끈다 → 최종을 draft로 처리(degraded), 버블 단일 줄.
+    quality_enabled: bool = True
 
     # 저장 (SQLite 영속 — decisions.md D9)
     db_url: str = "sqlite+aiosqlite:///./data/app.db"
