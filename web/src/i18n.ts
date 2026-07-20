@@ -2,6 +2,7 @@
 export type Lang = "ko" | "en";
 
 export interface T {
+  appTitle: string;
   sessions: string;
   newConv: string;
   noSessions: string;
@@ -26,6 +27,7 @@ export interface T {
 
 export const STRINGS: Record<Lang, T> = {
   ko: {
+    appTitle: "실시간 번역",
     sessions: "번역 세션",
     newConv: "+ 새 대화",
     noSessions: "저장된 대화가 없습니다.\n메시지를 보내면 여기에 쌓입니다.",
@@ -48,6 +50,7 @@ export const STRINGS: Record<Lang, T> = {
     count: (n: number) => `${n}개`,
   },
   en: {
+    appTitle: "Live Translate",
     sessions: "Sessions",
     newConv: "+ New",
     noSessions: "No saved conversations yet.\nThey pile up here as you chat.",

@@ -41,7 +41,7 @@ export default function App() {
     <div className="app">
       {/* 상단 바(단일): 실시간 번역 · 번역 방향 · Docs · UI 언어 · 테마 */}
       <div className="statusbar">
-        <div className="wordmark"><span className="dot" />실시간 번역</div>
+        <div className="wordmark"><span className="dot" />{t.appTitle}</div>
         <span className="sb-div" />
         <div className="pair">
           <span className="tag">
