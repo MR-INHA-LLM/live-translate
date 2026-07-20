@@ -116,10 +116,19 @@ export default function App() {
               ))}
             </div>
           </div>
-          {(draftTgt || draftWit) && (
+          {(draftTgt || draftWit || c.draftPending) && (
             <div className="draftprev">
-              {draftTgt && <span><span className="lab">초벌 {c.tgt}</span>{draftTgt}</span>}
+              {draftTgt && (
+                <span>
+                  <span className="lab">초벌 {c.tgt}</span>
+                  {draftTgt}
+                  {c.draftPending && <span className="pdot" title="새 번역 계산 중">…</span>}
+                </span>
+              )}
               {draftWit && <span><span className="lab">초벌 {c.witnessLang}</span>{draftWit}</span>}
+              {!draftTgt && !draftWit && c.draftPending && (
+                <span className="pendingline">번역 중…</span>
+              )}
             </div>
           )}
           <div className="inrow">

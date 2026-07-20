@@ -30,9 +30,16 @@ export interface ChatMessage {
   draftMs?: number; // 초벌·검증 소요(ms)
   finalMs?: number; // LLM 소요(ms)
   roundTripMs?: number; // 역번역 소요(ms)
+  degraded?: boolean; // quality 미가용 → draft로 최종 (초벌==최종, 버블 단일 줄)
 }
 
-const DEBOUNCE_MS = 200; // 초벌 발사 전 대기 (StabilityConfig.debounce_ms 기본과 동일)
+// 적응형 디바운스: 최근 초벌 지연에 맞춰 자동 조절(GPU 빠르면 짧게, CPU 느리면 길게).
+const DEBOUNCE_MIN = 150;
+const DEBOUNCE_MAX = 1000;
+function nextDebounce(lastMs: number | undefined): number {
+  if (!lastMs) return 200;
+  return Math.max(DEBOUNCE_MIN, Math.min(DEBOUNCE_MAX, Math.round(lastMs * 0.6)));
+}
 const DEFAULT_SRC = "ko";
 const DEFAULT_TGT = "en"; // 기본 쌍 ko⇄en (design). 선택기로 변경.
 
@@ -52,6 +59,7 @@ export function useChat() {
   const [custSending, setCustSending] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [draftPending, setDraftPending] = useState(false); // 초벌 계산 대기(기존 초벌은 유지)
 
   const ws = useRef<WebSocket | null>(null);
   const revision = useRef(0);
@@ -62,6 +70,11 @@ export function useChat() {
   const convId = useRef<string | null>(null);
   // 초벌 소요(ms) — 전송 시점 캡처를 latency state 클로저 레이스 없이 하려고 ref로 둔다.
   const lastDraftMs = useRef<number | undefined>(undefined);
+  // 단일 in-flight 코디네이션(anti-jank): 요청은 항상 1개만, 나머지는 최신값만 대기.
+  const inflight = useRef(false);
+  const pendingValue = useRef<string | null>(null);
+  const sentRev = useRef(0);
+  const sendDraftRef = useRef<(v: string) => void>(() => {}); // 효과 클로저에서 최신 sendDraft 참조
 
   // 카탈로그 로드 → 세션 생성 → WS 연결 (언어쌍 바뀌면 재생성)
   useEffect(() => {
@@ -85,9 +98,17 @@ export function useChat() {
         const msg = JSON.parse(ev.data) as DraftResponse;
         if (msg.revision_id < latestRev.current) return; // stale
         latestRev.current = msg.revision_id;
-        setDraft(msg.renderings);
+        setDraft(msg.renderings); // 새 초벌 도착 시에만 교체(그전까지 이전 초벌 유지)
         setLatency(msg.latency);
         lastDraftMs.current = msg.latency.total_ms ?? msg.latency.ttft_ms ?? undefined;
+        // 이번 in-flight 요청의 응답이면 → 완료 처리 + 대기 중 최신값 발사(single-flight).
+        if (msg.revision_id >= sentRev.current) {
+          inflight.current = false;
+          const next = pendingValue.current;
+          pendingValue.current = null;
+          if (next && next.trim()) sendDraftRef.current(next);
+          else setDraftPending(false);
+        }
       };
       ws.current = sock;
     })().catch(() => {});
@@ -121,22 +142,42 @@ export function useChat() {
     [src, tgt, witnessLang, refreshList],
   );
 
-  // 초벌 전송은 입력 핸들러에서 명시적으로 트리거한다(useEffect[text] 의존 X).
-  // 한글 IME: 조합 중 onChange가 값을 미리 바꿔 compositionend에서 같은 값이 되면
-  // effect가 안 도는 문제가 있어 — compositionend에서 직접 스케줄한다.
-  const scheduleDraft = useCallback((value: string) => {
-    window.clearTimeout(debounce.current);
-    if (!value.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      setDraft({});
-      return;
-    }
-    debounce.current = window.setTimeout(() => {
-      revision.current += 1;
-      ws.current?.send(
-        JSON.stringify({ revision_id: revision.current, partial_text: value, is_final: false }),
-      );
-    }, DEBOUNCE_MS);
+  // 실제 발사(single-flight): 항상 in-flight 1개만. refs만 쓰므로 stable.
+  const sendDraft = useCallback((value: string) => {
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+    revision.current += 1;
+    sentRev.current = revision.current;
+    inflight.current = true;
+    setDraftPending(true); // 기존 초벌은 유지한 채 "계산 중" 표시만
+    ws.current.send(
+      JSON.stringify({ revision_id: revision.current, partial_text: value, is_final: false }),
+    );
   }, []);
+  sendDraftRef.current = sendDraft;
+
+  // 초벌 스케줄은 입력 핸들러에서 트리거(useEffect[text] 의존 X). 한글 IME: 조합 확정 시
+  // 같은 값이면 effect가 안 도는 문제 회피용으로 직접 스케줄한다. 적응형 디바운스 후,
+  // 이미 요청이 떠 있으면 보내지 않고 **최신값만** 대기시켜(single-flight) 큐잉/우다다 방지.
+  const scheduleDraft = useCallback(
+    (value: string) => {
+      window.clearTimeout(debounce.current);
+      if (!value.trim() || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
+        // revision 무효화 → 아직 오는 중인 초벌 응답을 stale로 드롭(빈 입력에 옛 초벌 방지).
+        revision.current += 1;
+        latestRev.current = revision.current;
+        pendingValue.current = null;
+        inflight.current = false;
+        setDraftPending(false);
+        setDraft({});
+        return;
+      }
+      debounce.current = window.setTimeout(() => {
+        if (inflight.current) pendingValue.current = value; // 대기(최신값만 유지)
+        else sendDraft(value);
+      }, nextDebounce(lastDraftMs.current));
+    },
+    [sendDraft],
+  );
 
   const onInput = useCallback(
     (v: string) => {
@@ -168,6 +209,13 @@ export function useChat() {
     setSending(true);
     setText("");
     setDraft({});
+    // single-flight 상태 초기화(대기 중이던 초벌 요청 버림 + in-flight 응답 stale 처리).
+    window.clearTimeout(debounce.current);
+    revision.current += 1;
+    latestRev.current = revision.current;
+    pendingValue.current = null;
+    inflight.current = false;
+    setDraftPending(false);
     // Pombal 컨텍스트: 직전 턴들의 원문(양측, 순서대로).
     const context = messages.map((m) => m.source);
     try {
@@ -183,7 +231,7 @@ export function useChat() {
             ...m,
             {
               id: `m-${done.turn_id}-${Date.now()}`, side: "mine", source, translation,
-              draft: draftText, witness, draftMs, finalMs,
+              draft: draftText, witness, draftMs, finalMs, degraded: done.degraded,
               roundTrip: done.round_trip ?? undefined,
               confidence: done.confidence, alignment: done.alignment,
               roundTripMs: done.round_trip_ms ?? undefined,
@@ -229,6 +277,7 @@ export function useChat() {
               source, // 고객이 입력한 원문(tgt 언어)
               translation,
               finalMs,
+              degraded: done.degraded,
               roundTrip: done.round_trip ?? undefined,
               confidence: done.confidence, alignment: done.alignment,
               roundTripMs: done.round_trip_ms ?? undefined,
@@ -317,7 +366,7 @@ export function useChat() {
 
   return {
     catalog, sessionId, revSessionId, src, tgt, setTgt, swap, witnessLang, nameOf,
-    messages, text, onInput, draft, latency, sending, send,
+    messages, text, onInput, draft, draftPending, latency, sending, send,
     custText, setCustText, custSending, sendFromCustomer,
     conversations, activeConvId, loadConversation, newConversation, removeConversation,
     onCompositionStart, onCompositionEnd,
