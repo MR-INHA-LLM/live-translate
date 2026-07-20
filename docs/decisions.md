@@ -301,3 +301,19 @@ D13에서 정렬 센터피스로 awesome-align을 확정했고, 이제 검증 4�
 - **QE + 정렬 공존**: 최종 번역 줄에서 QE(저신뢰 amber 밑줄)와 정렬(hover 배경 강조)을
   **다른 시각 채널**로 겹쳐 렌더(서로 간섭 없음). 소스 구에 hover하면 대응 번역 구가
   같이 강조된다.
+
+### D17. 공개 API — 무상태 RESTful `/translations` + API 키 인증
+
+외부 기업이 **번역 품질을 확인**하는 채널로 API를 공개한다. 이 목적에서 결정:
+
+- **표면 = REST/JSON.** protobuf/gRPC는 외부 공개엔 마찰만 크다(브라우저·툴링). 실시간
+  초벌은 WS로 남기되 **외부 기본 채널은 REST**, 스트리밍이 필요하면 SSE(REST 호환).
+- **무상태 `POST /api/v1/translations`** 신설(fastapi-standards의 AI-잡 규약대로 복수
+  액션-명사). 세션/DB 없이 한 번 번역. `context`로 문맥, **`verify=true`면 품질 확인
+  데이터(초벌·역번역·신뢰도·정렬·확인)를 함께 반환** — 이게 "왜 믿을 만한가"를 증명하는
+  차별점이라 외부 API의 핵심 상품이다. `TranslationService`가 `QualityService`와 동일한
+  엔진·QE·정렬을 재사용(무상태 경로).
+- **API 키 인증**(레이트 리밋은 범위 외): `X-API-Key` 헤더를 `API_KEYS`(쉼표구분)와 대조.
+  **키 미설정이면 인증 비활성**(개발/콘솔 기본). `/api/v1/*`에 적용하되 `languages`(공개
+  카탈로그)·`stream`(브라우저 WS는 커스텀 헤더 불가)은 제외. WS 인증은 후속(쿼리 파라미터).
+- **에러**: 엔진 도달 불가(quality·draft 모두) → `503 upstream_engine_error`.

@@ -12,6 +12,7 @@ services:
       DRAFT_MODEL: hy-mt1.5-1.8b
       QUALITY_MODEL: qwen3-4b-instruct
       QUALITY_ENABLED: ${QUALITY_ENABLED:-true}   # CPU 배포: false → 최종을 draft로 degrade
+      API_KEYS: ${API_KEYS:-}                      # 공개 API 키(쉼표구분). 비면 인증 비활성
       DB_URL: sqlite+aiosqlite:////data/app.db
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:18090"]'
     extra_hosts:

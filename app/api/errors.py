@@ -12,6 +12,7 @@ from app.errors import (
     ConversationNotFoundError,
     SessionNotFoundError,
     UnsupportedLanguageError,
+    UpstreamEngineError,
 )
 from app.schemas.errors import ErrorResponse
 
@@ -36,3 +37,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         body = ErrorResponse(detail=str(exc) or "unsupported language",
                              error_code="unsupported_language")
         return JSONResponse(status_code=422, content=body.model_dump())
+
+    @app.exception_handler(UpstreamEngineError)
+    async def _upstream_engine(_: Request, exc: UpstreamEngineError) -> JSONResponse:
+        body = ErrorResponse(detail=str(exc) or "translation engine unavailable",
+                             error_code="upstream_engine_error")
+        return JSONResponse(status_code=503, content=body.model_dump())

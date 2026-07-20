@@ -17,6 +17,7 @@ from app.services.draft import DraftService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
 from app.services.session import SessionService
+from app.services.translation import TranslationService
 
 
 @dataclass
@@ -32,4 +33,5 @@ class Container:
     quality_service: QualityService
     session_service: SessionService
     conversation_service: ConversationService
+    translation_service: TranslationService
     language_service: LanguageService
