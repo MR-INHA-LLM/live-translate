@@ -37,7 +37,11 @@
 - **web/console**: "번역 중…" 표시를 **기존 초벌을 지우지 않게** 개선 — 이미 초벌이 떠 있으면 유지하고 작은 진행점(…)만 덧붙이고, 첫 번역(아직 없을 때)만 "번역 중…"을 단독 표시.
 - **web/console (CPU 모드 대비)**: quality 미가용(`degraded`)이면 초벌==최종이라 버블을 **단일 "번역" 줄**로 접는다(초벌/LLM 이중 표기 제거). GPU가 있으면 기존대로 초벌·LLM 분리.
 
+### 🐛 Fixes
+- **web/console**: 저장된 대화를 열면 **상단 언어 선택기가 그 대화의 언어쌍과 동기화**되도록 수정 — `loadConversation`이 재번역 트리거·스테일 비교가 있는 `setTgt` 래퍼 대신 raw 세터로 직접 설정(예: id 상태에서 en 대화 클릭 시 en으로 동기화). 복원된 대화는 불필요한 재번역도 하지 않는다.
+
 ### 🔧 Infra / Ops
+- **cleanup**: 전 스택 도커화로 중복이 된 호스트 런처 `serve_*.sh`(draft·quality·aligner·draft_cpu) 제거. README·docs/serving.md·decisions(D15/D16)를 docker 기준으로 갱신.
 - **cpu 배포 프로파일**: GPU 없는 환경용 `docker compose --profile cpu up` — `cpu_server/`(transformers 기반 OpenAI 호환 draft 서버, HunYuan 네이티브)를 컨테이너로 띄우고 quality는 끈다(`QUALITY_ENABLED=false` → 최종을 draft로 degrade, 버블 단일 "번역" 줄). 생성은 `_gen_lock`으로 직렬화(CPU 단일 모델), sync 제너레이터로 이벤트 루프 비블로킹, generate 실패 시 streamer 강제 종료(데드락 방지). 호스트 대안 `serve_draft_cpu.sh`. 설정 플래그 `quality_enabled`.
 - **cleanup**: 미참조 `web/public/icons.svg`, 루트 `serve_draft.sh`와 중복이던 `bench/serve_draft.sh` 제거(README·docs/serving.md 참조를 루트 스크립트/도커로 갱신).
 - **compose**: vLLM 두 tier(draft·quality)를 **도커화** — `vllm/vllm-openai` 이미지로 `vllm-draft`·`vllm-quality` 서비스 추가, 로컬 `./models`를 마운트해 재다운로드 없이 로드, GPU 예약(`deploy.resources … nvidia`), healthcheck 포함. 이제 **`docker compose --profile gpu up` 한 번**으로 vLLM+gateway+nginx 전체 기동(정렬은 호스트 :8003 유지). gateway `DRAFT_URL`/`QUALITY_URL` 기본값을 컨테이너 서비스명으로 변경(호스트 vLLM은 env override). 전제: `nvidia-container-toolkit` 설치.
@@ -49,4 +53,4 @@
 - **tests/e2e**: 대화 저장소 CRUD(생성·추가·목록·복원·404) pytest 추가(vLLM 불필요, 순수 DB). `web/e2e-smoke.mjs`에 목록 적재·새 대화·복원 시나리오 추가.
 
 ---
-**배포 노트**: **전체 스택 = `docker compose --profile gpu up`** (vLLM draft·quality + gateway + nginx). 전제: `nvidia-container-toolkit`. 정렬은 호스트 프로세스 `bash serve_aligner.sh`(:8003) — 미기동 시 정렬 생략(graceful). 호스트 vLLM 방식으로 되돌리려면 `DRAFT_URL`/`QUALITY_URL`을 `host.docker.internal:8001/8002`로 override하고 `serve_draft.sh`·`serve_quality.sh` 사용. `QUALITY_MODEL=qwen3-4b-instruct`. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages`에 컬럼(`draft`/`draft_ms`/`final_ms`)이 추가되어, **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.
+**배포 노트**: **전체 스택 = `docker compose --profile gpu up`** — vLLM(draft·quality) + aligner + gateway + nginx 전부 docker. 전제: `nvidia-container-toolkit`. GPU 없는 환경은 `--profile cpu`(quality 없이 draft만). 호스트 런처(`serve_*.sh`)는 전 스택 도커화로 제거됨. `QUALITY_MODEL=qwen3-4b-instruct`. 새 테이블 `conversations`/`messages`는 기동 시 `create_all`로 자동 생성. ⚠️ `messages` 컬럼 변경분이 있어 **미리 배포된 개발 DB가 있으면 `gateway-data` 볼륨을 재생성**해야 한다(`docker compose down && docker volume rm live-translate_gateway-data`). Alembic 미도입(create_all 모드) 상태의 데모 한정 조치. env 변경 없음.

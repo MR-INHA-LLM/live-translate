@@ -99,12 +99,12 @@
 요구사항·GPU 배치·기동 명령·환경 플래그는 [`docs/serving.md`](docs/serving.md).
 
 ```bash
-# 전체 스택 한 번에 (vLLM draft·quality + gateway + nginx). 정렬은 호스트 프로세스.
-docker compose --profile gpu up      # http://localhost:18090
-bash serve_aligner.sh                # 구 정렬 서비스 (:8003)
+# 전체 스택 한 번에 — vLLM(draft·quality) + aligner + gateway + nginx 전부 docker.
+docker compose --profile gpu up      # http://localhost:18090 · Swagger /docs
 ```
 
-호스트에서 vLLM을 직접 띄우려면 `serve_draft.sh`·`serve_quality.sh`(+ `DRAFT_URL`/`QUALITY_URL` override).
+전제: `nvidia-container-toolkit`. GPU 없는 환경은 `docker compose --profile cpu up`
+(quality 없이 draft만, docs/serving.md 참고).
 
 ---
 
