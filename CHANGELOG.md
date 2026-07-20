@@ -6,6 +6,8 @@
 ## [Unreleased]
 
 ### ✨ Features
+- **api/translations (공개 API)**: 무상태 **`POST /api/v1/translations`** 신설 — 세션 없이 한 번의 번역. `context`로 문맥, **`verify=true`면 품질 확인 데이터(초벌·역번역·신뢰도·정렬·확인)를 함께 반환**(외부 기업이 번역 품질을 확인하는 채널). REST/JSON 표면(protobuf 불필요, WS는 실시간 초벌용 옵션). 엔진 도달 불가 시 `503`.
+- **api (인증)**: **API 키 인증**(`X-API-Key` ↔ `API_KEYS` 쉼표구분). 키 미설정이면 비활성(개발/콘솔 기본), 설정 시 `/api/v1/*`에 요구. `languages`(공개)·`stream`(브라우저 WS 헤더 불가)은 제외. 레이트 리밋은 범위 외.
 - **web/console (디자인 개편)**: FE 전면 리디자인 — `design-handoff`(MedicaVox) 디자인 시스템 반영(배경 #eef2f7·블루 프라이머리·Noto Sans), 메시지를 **검증 레코드 카드**로(초벌·최종·역번역·확인 레인 + 색상 레일), **정렬을 쌍별 색 매칭**(배경색, 글씨 검정, hover 강조)으로 표현, **신뢰도** 주황. 상단 바를 **하나로 병합**(실시간 번역 + 번역 방향 + Docs + UI언어 + 테마). 고객 화면에 **상담원 프로필 아바타**(카카오톡식: 연속 버블은 첫 버블만). 국기(KR/US/ID) 방향 선택기. 시나리오·`고객/운영자` 라벨·장식 요소 제거. 용어 한글 통일(초벌/최종/정렬/역번역/신뢰도/확인).
 - **web/console (i18n)**: 콘솔 UI 언어 **KO/EN 토글**(번역 방향과 별개). 라이트/다크 **테마 토글**(선호도 감지 + 저장).
 - **web/console (API Docs)**: 상단 우측 **API Docs** 버튼 → FastAPI Swagger(`/docs`). nginx가 `/docs`·`/openapi.json`·`/redoc`를 게이트웨이로 프록시.

@@ -9,12 +9,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.api.deps import verify_api_key
 from app.api.errors import register_exception_handlers
-from app.api.v1 import conversations, languages, sessions, stream, turns
+from app.api.v1 import conversations, languages, sessions, stream, translations, turns
 from app.config import Settings
 from app.container import Container
 from app.core.logging import setup_logging
@@ -33,6 +34,7 @@ from app.services.draft import DraftService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
 from app.services.session import SessionService
+from app.services.translation import TranslationService
 
 
 @asynccontextmanager
@@ -63,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # 서비스
     languages_svc = LanguageService()
     context = ContextAssembler(settings.context_turns, settings.context_token_budget)
+    app.state.api_keys = settings.api_key_set  # 공개 API 키(비면 인증 비활성)
     app.state.container = Container(
         registry=registry,
         session_repo=repo,
@@ -73,6 +76,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         quality_service=QualityService(registry, repo, context, aligner),
         session_service=SessionService(repo, languages_svc),
         conversation_service=ConversationService(conversation_repo),
+        translation_service=TranslationService(
+            registry, context, aligner, settings.draft_model, settings.quality_model
+        ),
         language_service=languages_svc,
     )
     try:
@@ -98,10 +104,14 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
 
-    app.include_router(sessions.router, prefix="/api/v1")
-    app.include_router(conversations.router, prefix="/api/v1")
+    # 공개 API 키 인증(설정 시). 카탈로그(languages)는 공개, WS(stream)는 헤더 인증
+    # 불가라 제외 — 둘 다 API_KEYS 설정과 무관하게 열어둔다.
+    auth = [Depends(verify_api_key)]
+    app.include_router(sessions.router, prefix="/api/v1", dependencies=auth)
+    app.include_router(conversations.router, prefix="/api/v1", dependencies=auth)
+    app.include_router(turns.router, prefix="/api/v1", dependencies=auth)
+    app.include_router(translations.router, prefix="/api/v1", dependencies=auth)
     app.include_router(languages.router, prefix="/api/v1")
-    app.include_router(turns.router, prefix="/api/v1")
     app.include_router(stream.router, prefix="/api/v1")
 
     @app.get("/health", tags=["ops"])
