@@ -411,8 +411,11 @@ export function useChat() {
           roundTripMs: m.round_trip_ms ?? undefined,
         })),
       );
+      // 복원된 대화는 이미 해당 언어쌍으로 번역돼 있으므로 raw 세터로 직접 설정한다
+      // (setTgt 래퍼는 재번역을 트리거하고 스테일 tgt 비교로 갱신을 놓칠 수 있음).
+      retranslatePending.current = false;
       setSrc(detail.src_lang);
-      setTgt(detail.tgt_lang);
+      setTgtState(detail.tgt_lang);
     },
     [],
   );

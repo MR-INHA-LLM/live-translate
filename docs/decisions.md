@@ -270,7 +270,7 @@ M1까지 quality tier를 draft(HY-MT)로 degrade해 두었으나(초벌==최종�
 - **모델 선정**: Gemma 3/4 계열은 HF gated(수동 승인)라 read-only 토큰으로 불안정 →
   **open 모델 `Qwen/Qwen3-4B-Instruct-2507`** 채택(다국어 우수, 경량). 단일 RTX 4090을
   draft와 공유: draft `--gpu-memory-utilization 0.30`(~7GB) + quality `0.50`(~12GB) = ~19/24GB.
-  서빙은 `serve_draft.sh`·`serve_quality.sh`로 코드화(WSL2 vLLM 플래그 포함).
+  서빙은 docker compose(`vllm-draft`·`vllm-quality`)로 코드화(WSL2 플래그 포함).
 - **컨텍스트 = Pombal et al.(TACL 2026)** *A Context-aware Framework for Translation-mediated
   Conversations*. 핵심: 컨텍스트로 직전 턴들의 **원문(x_<t)** 을 순서대로 주입한다(번역문
   아님). 화자 역할·메타데이터는 넣지 않는 미니멀 구성. 6~10턴이면 대부분 충분(§6.1).
@@ -283,16 +283,18 @@ M1까지 quality tier를 draft(HY-MT)로 degrade해 두었으나(초벌==최종�
   draft "Please keep that until Friday"(오역). 초벌 "move the meeting" vs LLM "reschedule
   the meeting"처럼 두 tier가 실제로 다른 출력을 낸다. 동음이의어 완전 해소는 4B 용량 한계.
 
-### D16. 검증 스위트 완성 — 정렬 서비스는 별도 호스트 프로세스
+### D16. 검증 스위트 완성 — 정렬 서비스 분리 (호스트 → 컨테이너)
 
 D13에서 정렬 센터피스로 awesome-align을 확정했고, 이제 검증 4종(witness·QE·역번역·
 정렬)을 모두 배선한다.
 
+> **개정**: 처음엔 torch 이미지 빌드를 피하려 호스트 프로세스(:8003)로 뒀으나, 전 스택
+> 도커화(전 스택 `docker compose --profile gpu up`) 방향에 맞춰 **`aligner/Dockerfile`로
+> 컨테이너화**했다(호스트 HF 캐시 마운트로 모델 재사용). 호스트 런처 `serve_*.sh`는 제거.
+
 - **정렬 서비스 분리**: transformers/torch가 vLLM·COMET과 충돌(D7)하므로 게이트웨이와
-  별도 프로세스로 띄운다. 컨테이너 대신 프로젝트 `.venv`(simalign 포함)로 **호스트
-  프로세스(:8003)** 로 서빙 — vLLM(:8001/:8002)과 동일한 배치라 일관적이고 torch 이미지
-  빌드가 불필요. `aligner/app.py`(FastAPI) + `serve_aligner.sh`. 모델
-  `aneuraz/awesome-align-with-co`는 HF 캐시에 이미 존재.
+  별도 서비스로 띄운다. `aligner/app.py`(FastAPI) + `aligner/Dockerfile`(CPU, simalign).
+  모델 `aneuraz/awesome-align-with-co`는 호스트 HF 캐시를 마운트해 재다운로드 없이 로드.
 - **호출·정직성**: 게이트웨이 `HttpAligner`가 턴 확정 시 1회 호출(초벌 핫패스 아님).
   도달 불가/타임아웃이면 빈 목록으로 **graceful degrade** — 정렬은 보조 시각 장치라
   없어도 번역은 성립. 어절 단위 정렬 → 문자 오프셋 스팬, 구두점-only 대응은 제거.
