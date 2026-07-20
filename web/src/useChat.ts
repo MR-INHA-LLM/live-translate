@@ -48,9 +48,10 @@ export function useChat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [revSessionId, setRevSessionId] = useState<string | null>(null); // 고객→운영자 역방향
   const [src, setSrc] = useState(DEFAULT_SRC);
-  const [tgt, setTgt] = useState(DEFAULT_TGT);
+  const [tgt, setTgtState] = useState(DEFAULT_TGT);
   const [witnessLang, setWitnessLang] = useState("en");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [retranslating, setRetranslating] = useState(false); // 언어 변경 시 기존 메시지 재번역 중
   const [text, setText] = useState("");
   const [custText, setCustText] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -70,6 +71,9 @@ export function useChat() {
   const convId = useRef<string | null>(null);
   // 초벌 소요(ms) — 전송 시점 캡처를 latency state 클로저 레이스 없이 하려고 ref로 둔다.
   const lastDraftMs = useRef<number | undefined>(undefined);
+  // 언어 변경 시 기존 메시지 재번역: 세션 재생성 후 트리거하기 위한 ref들.
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const retranslatePending = useRef(false);
   // 단일 in-flight 코디네이션(anti-jank): 요청은 항상 1개만, 나머지는 최신값만 대기.
   const inflight = useRef(false);
   const pendingValue = useRef<string | null>(null);
@@ -118,6 +122,75 @@ export function useChat() {
       ws.current = null;
     };
   }, [src, tgt]);
+
+  // messages를 ref로 미러(재번역 효과에서 최신값 참조).
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // 언어 변경 시 기존 운영자(mine) 메시지를 새 타겟 언어로 **재번역**한다.
+  // setTgt에서 pending 플래그를 세우고, 세션이 새로 생기면(sessionId 변경) 여기서 실행.
+  useEffect(() => {
+    if (!sessionId || !retranslatePending.current) return;
+    retranslatePending.current = false;
+    const sid = sessionId;
+    let cancelled = false;
+    (async () => {
+      setRetranslating(true);
+      const ctx: string[] = []; // Pombal 컨텍스트 누적(이전 원문들)
+      for (const m of messagesRef.current) {
+        if (cancelled) break;
+        if (m.side !== "mine") {
+          ctx.push(m.source);
+          continue;
+        }
+        const context = [...ctx];
+        ctx.push(m.source);
+        await streamTurn(
+          sid,
+          m.source,
+          {
+            onDone: (done) => {
+              setMessages((prev) =>
+                prev.map((x) =>
+                  x.id === m.id
+                    ? {
+                        ...x,
+                        translation: done.translation,
+                        draft: undefined,
+                        draftMs: undefined,
+                        witness: undefined,
+                        roundTrip: done.round_trip ?? undefined,
+                        roundTripMs: done.round_trip_ms ?? undefined,
+                        confidence: done.confidence,
+                        alignment: done.alignment,
+                        finalMs: done.latency.total_ms ?? done.latency.ttft_ms ?? undefined,
+                        degraded: done.degraded,
+                      }
+                    : x,
+                ),
+              );
+            },
+          },
+          context,
+        );
+      }
+      if (!cancelled) setRetranslating(false);
+    })().catch(() => setRetranslating(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // 언어(타겟) 변경 — 기존 메시지가 있으면 재번역을 예약한다(세션 재생성 후 실행).
+  const setTgt = useCallback(
+    (code: string) => {
+      if (code === tgt) return;
+      if (messagesRef.current.length > 0) retranslatePending.current = true;
+      setTgtState(code);
+    },
+    [tgt],
+  );
 
   // 대화 목록(저장소) 로드 — 마운트 시 1회.
   const refreshList = useCallback(async () => {
@@ -354,9 +427,10 @@ export function useChat() {
   );
 
   const swap = useCallback(() => {
+    // 스왑은 방향을 뒤집고 대화를 초기화한다(재번역 아님) → 래퍼 대신 raw 세터 사용.
     resetConversation();
     setSrc(tgt);
-    setTgt(src);
+    setTgtState(src);
   }, [src, tgt, resetConversation]);
 
   const nameOf = useCallback(
@@ -366,7 +440,7 @@ export function useChat() {
 
   return {
     catalog, sessionId, revSessionId, src, tgt, setTgt, swap, witnessLang, nameOf,
-    messages, text, onInput, draft, draftPending, latency, sending, send,
+    messages, retranslating, text, onInput, draft, draftPending, latency, sending, send,
     custText, setCustText, custSending, sendFromCustomer,
     conversations, activeConvId, loadConversation, newConversation, removeConversation,
     onCompositionStart, onCompositionEnd,
