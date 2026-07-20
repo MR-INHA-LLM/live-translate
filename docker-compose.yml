@@ -8,7 +8,7 @@ services:
     environment:
       DRAFT_URL: ${DRAFT_URL:-http://vllm-draft:8000/v1}
       QUALITY_URL: ${QUALITY_URL:-http://vllm-quality:8000/v1}
-      ALIGN_URL: ${ALIGN_URL:-http://host.docker.internal:8003}          # 정렬은 호스트 프로세스
+      ALIGN_URL: ${ALIGN_URL:-http://aligner:8000}                       # awesome-align 정렬 컨테이너
       DRAFT_MODEL: hy-mt1.5-1.8b
       QUALITY_MODEL: qwen3-4b-instruct
       QUALITY_ENABLED: ${QUALITY_ENABLED:-true}   # CPU 배포: false → 최종을 draft로 degrade
@@ -99,6 +99,23 @@ services:
       timeout: 5s
       retries: 20
       start_period: 60s
+
+  # 정렬 서비스 (awesome-align, CPU). GPU/CPU 배포 모두에서 사용. 호스트 HF 캐시를
+  # 마운트해 모델(aneuraz/awesome-align-with-co)을 재다운로드 없이 로드.
+  aligner:
+    build:
+      context: .
+      dockerfile: aligner/Dockerfile
+    profiles: ["gpu", "cpu"]
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,json,sys; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:8000/health',timeout=3)).get('status')=='ok' else 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
 
 volumes:
   gateway-data:

@@ -1,23 +1,23 @@
 import { useState, type ReactNode } from "react";
 import type { AlignmentSpan, ConfidenceSpan } from "./api";
 import type { ChatMessage } from "./useChat";
+import type { T } from "./i18n";
 
-const secs = (ms: number) => `${(ms / 1000).toFixed(2)}초`;
+const secs = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
 interface Mark {
   start: number;
   end: number;
   link?: number; // 정렬 링크 인덱스
-  low?: boolean; // QE 저신뢰
+  low?: boolean; // 신뢰도 저조
 }
-
 interface Seg {
   text: string;
   links: number[];
   low: boolean;
 }
 
-// 텍스트를 마크 경계로 잘라 각 구간이 어떤 정렬 링크·QE에 걸치는지 계산.
+// 텍스트를 마크 경계로 잘라 각 구간이 어떤 정렬 링크·신뢰도에 걸치는지 계산.
 function segmentize(text: string, marks: Mark[]): Seg[] {
   const bounds = new Set<number>([0, text.length]);
   for (const m of marks) {
@@ -37,21 +37,14 @@ function segmentize(text: string, marks: Mark[]): Seg[] {
   return segs;
 }
 
-function renderSegs(
-  segs: Seg[],
-  active: number[],
-  setActive: (l: number[]) => void,
-): ReactNode {
+function renderSegs(segs: Seg[], active: number[], setActive: (l: number[]) => void): ReactNode {
   return segs.map((s, i) => {
     if (!s.links.length && !s.low) return s.text;
     const isActive = s.links.some((l) => active.includes(l));
-    const cls = [
-      s.low ? "qe low" : "",
-      s.links.length ? "al" : "",
-      isActive ? "active" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    // 신뢰도 저조가 우선(주황). 아니면 정렬 색(쌍 인덱스 % 5).
+    const cls = s.low
+      ? "qe"
+      : `al a${s.links[0] % 5}${isActive ? " on" : ""}`;
     return (
       <span
         key={i}
@@ -70,14 +63,17 @@ export function Bubble({
   src,
   tgt,
   witnessLang,
+  t,
 }: {
   m: ChatMessage;
   src: string;
   tgt: string;
   witnessLang: string;
+  t: T;
 }) {
   const [active, setActive] = useState<number[]>([]);
-  const transLang = m.side === "mine" ? tgt : src;
+  const transLang = m.side === "mine" ? tgt : src; // 초벌·최종 언어
+  const rtLang = m.side === "mine" ? src : tgt; // 역번역 언어(원래 원문 언어)
   const align = m.alignment ?? [];
   const conf: ConfidenceSpan[] = m.confidence ?? [];
 
@@ -92,44 +88,46 @@ export function Bubble({
 
   return (
     <div className={`row ${m.side}`}>
-      <div className="meta">{m.side === "mine" ? "운영자(나)" : "고객"}</div>
-      <div className="bubble">
-        <div className="orig">{align.length ? renderSegs(srcSegs, active, setActive) : m.source}</div>
-        {/* quality 미가용(degraded)이면 초벌==최종이라 별도 초벌 줄을 접는다. */}
-        {m.draft && !m.degraded && (
-          <div className="trans draft">
-            <span className="lab">
-              초벌 {transLang}
-              {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
-            </span>
-            {m.draft}
+      <div className="rec">
+        <div className="src">{align.length ? renderSegs(srcSegs, active, setActive) : m.source}</div>
+        <div className="stack">
+          {m.draft && !m.degraded && (
+            <div className="lane draft">
+              <div className="k">
+                <span className="name">{t.draft} {transLang}</span>
+                {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
+              </div>
+              <div className="v">{m.draft}</div>
+            </div>
+          )}
+          <div className="lane qlt">
+            <div className="k">
+              <span className="name">{t.final} {transLang}</span>
+              {m.finalMs != null && <span className="ms">{secs(m.finalMs)}</span>}
+            </div>
+            <div className="v">
+              {align.length || conf.length ? renderSegs(tgtSegs, active, setActive) : m.translation}
+            </div>
           </div>
-        )}
-        <div className="trans final">
-          <span className="lab">
-            {m.degraded ? "번역" : "LLM"} {transLang}
-            {m.finalMs != null && <span className="ms">{secs(m.finalMs)}</span>}
-          </span>
-          {align.length || conf.length ? renderSegs(tgtSegs, active, setActive) : m.translation}
+          {m.roundTrip && (
+            <div className="lane rt">
+              <div className="k">
+                <span className="name">{t.backtr} {rtLang}</span>
+                {m.roundTripMs != null && <span className="ms">{secs(m.roundTripMs)}</span>}
+              </div>
+              <div className="v">{m.roundTrip}</div>
+            </div>
+          )}
+          {m.witness && (
+            <div className="lane wit">
+              <div className="k">
+                <span className="name">{t.witness} {witnessLang}</span>
+                {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
+              </div>
+              <div className="v">{m.witness}</div>
+            </div>
+          )}
         </div>
-        {m.roundTrip && (
-          <div className="trans verify">
-            <span className="lab">
-              역번역 {m.side === "mine" ? src : tgt}
-              {m.roundTripMs != null && <span className="ms">{secs(m.roundTripMs)}</span>}
-            </span>
-            {m.roundTrip}
-          </div>
-        )}
-        {m.witness && (
-          <div className="trans verify">
-            <span className="lab">
-              확인 {witnessLang}
-              {m.draftMs != null && <span className="ms">{secs(m.draftMs)}</span>}
-            </span>
-            {m.witness}
-          </div>
-        )}
       </div>
     </div>
   );
