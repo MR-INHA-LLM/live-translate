@@ -20,3 +20,6 @@ logs/
 
 # Env
 .env
+
+# 디자인 핸드오프(참조 덤프 — 사용 에셋은 web/public에 복사됨)
+design-handoff/
