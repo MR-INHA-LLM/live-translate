@@ -75,7 +75,8 @@ export default function App() {
               ))}
             </select>
           </div>
-          {c.latency?.ttft_ms != null && (
+          {c.retranslating && <span className="lat retrans">언어 변경 · 재번역 중…</span>}
+          {!c.retranslating && c.latency?.ttft_ms != null && (
             <span className="lat">초벌 {Math.round(c.latency.ttft_ms)}ms</span>
           )}
         </header>
