@@ -95,7 +95,8 @@ export function Bubble({
       <div className="meta">{m.side === "mine" ? "운영자(나)" : "고객"}</div>
       <div className="bubble">
         <div className="orig">{align.length ? renderSegs(srcSegs, active, setActive) : m.source}</div>
-        {m.draft && (
+        {/* quality 미가용(degraded)이면 초벌==최종이라 별도 초벌 줄을 접는다. */}
+        {m.draft && !m.degraded && (
           <div className="trans draft">
             <span className="lab">
               초벌 {transLang}
@@ -106,7 +107,7 @@ export function Bubble({
         )}
         <div className="trans final">
           <span className="lab">
-            LLM {transLang}
+            {m.degraded ? "번역" : "LLM"} {transLang}
             {m.finalMs != null && <span className="ms">{secs(m.finalMs)}</span>}
           </span>
           {align.length || conf.length ? renderSegs(tgtSegs, active, setActive) : m.translation}

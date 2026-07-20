@@ -24,6 +24,11 @@
 - **web/console**: 고객 화면을 태블릿 규격(580px)으로 키우고 본문 폰트를 확대해 데모에서 "실제 고객 기기" 느낌을 강화. 빈 스테이지 위에 부양하도록 우측 패널만 배경 분리.
 - **web/console**: 고객 화면에 입력창 추가 — 외국인 고객이 자기 언어로 입력하면 역방향 세션으로 운영자 언어로 번역돼 작업대에 수신된다(양방향 대화 데모).
 
+### ✨ Features (cont.)
+- **web/console (초벌 anti-jank)**: 초벌 WS를 **single-flight**로 재설계 — in-flight 요청은 항상 1개, 그 사이 입력은 **최신값만 대기**시켜 큐잉·"우다다"(밀렸다 몰아치는 현상)를 없앴다. **적응형 디바운스**(최근 지연에 맞춰 150~1000ms 자동 조절)로 느린 환경에서도 매끄럽게. 백엔드 속도에 자동으로 맞춰지므로 CPU·GPU 공통 이득.
+- **web/console**: "번역 중…" 표시를 **기존 초벌을 지우지 않게** 개선 — 이미 초벌이 떠 있으면 유지하고 작은 진행점(…)만 덧붙이고, 첫 번역(아직 없을 때)만 "번역 중…"을 단독 표시.
+- **web/console (CPU 모드 대비)**: quality 미가용(`degraded`)이면 초벌==최종이라 버블을 **단일 "번역" 줄**로 접는다(초벌/LLM 이중 표기 제거). GPU가 있으면 기존대로 초벌·LLM 분리.
+
 ### 🔧 Infra / Ops
 - **compose**: vLLM 두 tier(draft·quality)를 **도커화** — `vllm/vllm-openai` 이미지로 `vllm-draft`·`vllm-quality` 서비스 추가, 로컬 `./models`를 마운트해 재다운로드 없이 로드, GPU 예약(`deploy.resources … nvidia`), healthcheck 포함. 이제 **`docker compose --profile gpu up` 한 번**으로 vLLM+gateway+nginx 전체 기동(정렬은 호스트 :8003 유지). gateway `DRAFT_URL`/`QUALITY_URL` 기본값을 컨테이너 서비스명으로 변경(호스트 vLLM은 env override). 전제: `nvidia-container-toolkit` 설치.
 
