@@ -43,7 +43,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = Settings()
 
     # 엔진(vLLM OpenAI 호환 클라이언트) + 프롬프트 전략 → 레지스트리
-    draft = VllmEngine(settings.draft_url, Tier.DRAFT, settings.engine_max_concurrency)
+    draft = VllmEngine(
+        settings.draft_url,
+        Tier.DRAFT,
+        settings.engine_max_concurrency,
+        default_repetition_penalty=settings.draft_repetition_penalty,  # HY-MT 공식 1.05
+    )
     registry = ModelRegistry()
     registry.register(settings.draft_model, draft, HyMtPromptBuilder(), Tier.DRAFT)
     # quality tier: 꺼져 있으면 미등록 → 최종 번역이 draft로 degrade(CPU 배포 등).

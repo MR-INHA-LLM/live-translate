@@ -21,17 +21,32 @@ class VllmEngine:
     """tier별 vLLM(OpenAI 호환) 인스턴스에 붙는 어댑터."""
 
     def __init__(
-        self, base_url: str, tier: Tier, max_concurrency: int = 8, api_key: str = "EMPTY"
+        self,
+        base_url: str,
+        tier: Tier,
+        max_concurrency: int = 8,
+        api_key: str = "EMPTY",
+        default_repetition_penalty: float | None = None,
     ) -> None:
         self._tier = tier
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key)
         self._sem = asyncio.Semaphore(max_concurrency)
+        # 모델별 기본 반복 페널티(예: HY-MT 1.05). 요청이 명시하면 그 값이 우선.
+        self._default_repetition_penalty = default_repetition_penalty
 
     async def stream(self, req: EngineRequest) -> AsyncIterator[TokenChunk]:
         """토큰을 스트리밍한다. 첫 청크만 ttft_ms, 각 청크에 logprob."""
         async with self._sem:
             t0 = time.perf_counter()
             first = True
+            # repetition_penalty는 표준 OpenAI 파라미터가 아니라 vLLM 확장 →
+            # extra_body로 전달. 요청 값 > 엔진 기본값 순으로 해석.
+            rep_pen = (
+                req.repetition_penalty
+                if req.repetition_penalty is not None
+                else self._default_repetition_penalty
+            )
+            extra_body = {"repetition_penalty": rep_pen} if rep_pen is not None else None
             try:
                 stream = await self._client.chat.completions.create(
                     model=req.model,
@@ -41,6 +56,7 @@ class VllmEngine:
                     stream=True,
                     logprobs=True,
                     top_logprobs=1,
+                    extra_body=extra_body,
                 )
                 async for chunk in stream:
                     if not chunk.choices:

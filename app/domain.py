@@ -44,6 +44,8 @@ class EngineRequest:
     messages: list[ChatMessage]
     temperature: float = 0.0
     max_tokens: int = 256
+    # None이면 엔진 기본값(모델별)을 따른다. 설정 시 요청 단위 override.
+    repetition_penalty: float | None = None
 
 
 @dataclass(frozen=True)
