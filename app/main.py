@@ -15,7 +15,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps import verify_api_key
 from app.api.errors import register_exception_handlers
-from app.api.v1 import conversations, languages, sessions, stream, translations, turns
+from app.api.v1 import (
+    api_keys,
+    conversations,
+    languages,
+    sessions,
+    stream,
+    translations,
+    turns,
+)
 from app.config import Settings
 from app.container import Container
 from app.core.logging import setup_logging
@@ -26,8 +34,13 @@ from app.models.orm import Base
 from app.prompts.hy_mt import HyMtPromptBuilder
 from app.prompts.qwen import QwenPromptBuilder
 from app.repositories.cache import InProcessRenderingCache
-from app.repositories.sql import SqlConversationRepository, SqlSessionRepository
+from app.repositories.sql import (
+    SqlApiKeyRepository,
+    SqlConversationRepository,
+    SqlSessionRepository,
+)
 from app.services.alignment import HttpAligner
+from app.services.api_key import ApiKeyService
 from app.services.context import ContextAssembler
 from app.services.conversation import ConversationService
 from app.services.draft import DraftService
@@ -64,13 +77,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     repo = SqlSessionRepository(session_factory)
     conversation_repo = SqlConversationRepository(session_factory)
+    api_key_service = ApiKeyService(SqlApiKeyRepository(session_factory))
+    # .env 부트스트랩 키를 DB에 seed(insert-if-absent) — 콘솔/FE 키가 항상 유효하도록.
+    for _bootstrap_key in settings.api_key_set:
+        await api_key_service.seed(_bootstrap_key, "seeded (.env)")
     aligner = HttpAligner(settings.align_url)
     cache = InProcessRenderingCache(settings.cache_max_entries)
 
     # 서비스
     languages_svc = LanguageService()
     context = ContextAssembler(settings.context_turns, settings.context_token_budget)
-    app.state.api_keys = settings.api_key_set  # 공개 API 키(비면 인증 비활성)
+    app.state.admin_api_key = settings.admin_api_key  # Admin API 보호(비면 503)
     app.state.container = Container(
         registry=registry,
         session_repo=repo,
@@ -85,6 +102,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             registry, context, aligner, settings.draft_model, settings.quality_model
         ),
         language_service=languages_svc,
+        api_key_service=api_key_service,
     )
     try:
         yield
@@ -118,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(translations.router, prefix="/api/v1", dependencies=auth)
     app.include_router(languages.router, prefix="/api/v1", dependencies=auth)
     app.include_router(stream.router, prefix="/api/v1")
+    app.include_router(api_keys.router, prefix="/api/v1")  # Admin(X-Admin-Key) 자체 보호
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:

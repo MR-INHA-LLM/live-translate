@@ -20,13 +20,18 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    # 공개 API 키 인증 — 쉼표구분 목록. 비우면 인증 비활성(개발/데모).
-    # 외부 공개 시 `API_KEYS=key1,key2`로 설정하면 /api/v1/* 에 X-API-Key 요구.
+    # 공개 API 키 인증 — 키는 DB(api_keys 테이블)에서 관리한다(발급·폐기·감사).
+    # `API_KEYS`는 부트스트랩용 — 시작 시 DB에 insert-if-absent 로 seed 한다(콘솔/FE 키가
+    # 항상 유효하도록). 외부 기업 키는 Admin API(/api/v1/api-keys)로 발급한다.
+    # DB에 활성 키가 하나도 없으면 인증 비활성(개발/데모).
     api_keys: str = ""
 
     @property
     def api_key_set(self) -> set[str]:
         return {k.strip() for k in self.api_keys.split(",") if k.strip()}
+
+    # Admin API(키 발급·폐기·조회) 보호용 관리자 키. 비우면 Admin API 비활성(503).
+    admin_api_key: str = ""
 
     # tier별 vLLM (OpenAI 호환) 엔드포인트
     draft_url: str = "http://127.0.0.1:8001/v1"

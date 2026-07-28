@@ -7,16 +7,18 @@ from __future__ import annotations
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.domain import (
+    ApiKey,
     ConversationDetail,
     ConversationSummary,
     Session,
     StoredMessage,
     Turn,
 )
-from app.models.orm import ConversationRow, MessageRow, SessionRow, TurnRow
+from app.models.orm import ApiKeyRow, ConversationRow, MessageRow, SessionRow, TurnRow
 
 _TITLE_MAX = 60
 
@@ -164,3 +166,65 @@ class SqlConversationRepository:
             await s.execute(sa_delete(ConversationRow).where(ConversationRow.id == conv_id))
             await s.commit()
             return True
+
+
+def _to_api_key(row: ApiKeyRow) -> ApiKey:
+    return ApiKey(
+        id=row.id, label=row.label, prefix=row.prefix, enabled=row.enabled,
+        created_at=row.created_at, last_used_at=row.last_used_at,
+    )
+
+
+class SqlApiKeyRepository:
+    """ApiKeyRepository의 SQLAlchemy 구현."""
+
+    def __init__(self, session_factory: async_sessionmaker) -> None:
+        self._sf = session_factory
+
+    async def add(self, key_id: str, key_hash: str, prefix: str, label: str) -> ApiKey:
+        async with self._sf() as s:
+            row = ApiKeyRow(id=key_id, key_hash=key_hash, prefix=prefix, label=label, enabled=True)
+            s.add(row)
+            await s.commit()
+            await s.refresh(row)
+            return _to_api_key(row)
+
+    async def list(self) -> list[ApiKey]:
+        async with self._sf() as s:
+            res = await s.execute(select(ApiKeyRow).order_by(ApiKeyRow.created_at.desc()))
+            return [_to_api_key(r) for r in res.scalars().all()]
+
+    async def enabled_hashes(self) -> set[str]:
+        async with self._sf() as s:
+            res = await s.execute(
+                select(ApiKeyRow.key_hash).where(ApiKeyRow.enabled.is_(True))
+            )
+            return set(res.scalars().all())
+
+    async def exists(self, key_hash: str) -> bool:
+        async with self._sf() as s:
+            cnt = await s.scalar(
+                select(func.count(ApiKeyRow.id)).where(ApiKeyRow.key_hash == key_hash)
+            )
+            return bool(cnt)
+
+    async def has_any(self) -> bool:
+        async with self._sf() as s:
+            return bool(await s.scalar(select(func.count(ApiKeyRow.id))))
+
+    async def set_enabled(self, key_id: str, enabled: bool) -> bool:
+        async with self._sf() as s:
+            row = await s.get(ApiKeyRow, key_id)
+            if row is None:
+                return False
+            row.enabled = enabled
+            await s.commit()
+            return True
+
+    async def touch(self, key_hash: str) -> None:
+        async with self._sf() as s:
+            await s.execute(
+                sa_update(ApiKeyRow).where(ApiKeyRow.key_hash == key_hash)
+                .values(last_used_at=func.now())
+            )
+            await s.commit()
