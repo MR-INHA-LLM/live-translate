@@ -104,14 +104,14 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
 
-    # 공개 API 키 인증(설정 시). 카탈로그(languages)는 공개, WS(stream)는 헤더 인증
-    # 불가라 제외 — 둘 다 API_KEYS 설정과 무관하게 열어둔다.
+    # API 키 인증(설정 시). 전 API에 적용 — WS(stream)는 헤더 불가라 쿼리 파라미터로
+    # 자체 검증(stream.py), /health(라이브니스 프로브)만 공개로 남긴다.
     auth = [Depends(verify_api_key)]
     app.include_router(sessions.router, prefix="/api/v1", dependencies=auth)
     app.include_router(conversations.router, prefix="/api/v1", dependencies=auth)
     app.include_router(turns.router, prefix="/api/v1", dependencies=auth)
     app.include_router(translations.router, prefix="/api/v1", dependencies=auth)
-    app.include_router(languages.router, prefix="/api/v1")
+    app.include_router(languages.router, prefix="/api/v1", dependencies=auth)
     app.include_router(stream.router, prefix="/api/v1")
 
     @app.get("/health", tags=["ops"])

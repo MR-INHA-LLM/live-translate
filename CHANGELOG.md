@@ -7,12 +7,13 @@
 
 ### ✨ Features
 - **api/translations (공개 API)**: 무상태 **`POST /api/v1/translations`** 신설 — 세션 없이 한 번의 번역. `context`로 문맥, **`verify=true`면 품질 확인 데이터(초벌·역번역·신뢰도·정렬·확인)를 함께 반환**(외부 기업이 번역 품질을 확인하는 채널). REST/JSON 표면(protobuf 불필요, WS는 실시간 초벌용 옵션). 엔진 도달 불가 시 `503`.
-- **api (인증)**: **API 키 인증**(`X-API-Key` ↔ `API_KEYS` 쉼표구분). 키 미설정이면 비활성(개발/콘솔 기본), 설정 시 `/api/v1/*`에 요구. `languages`(공개)·`stream`(브라우저 WS 헤더 불가)은 제외. 레이트 리밋은 범위 외.
+- **api (인증 기본화)**: **API 키 인증을 전 API로 확대** — `/api/v1/*` 전부 `X-API-Key`(↔ `API_KEYS` 쉼표구분)를 요구하고 `languages`도 포함. **WS(stream)는 브라우저가 헤더를 못 실어 `?api_key=` 쿼리로 자체 검증**(accept 전 1008 close), `/health`(라이브니스)만 공개. 콘솔(FE)은 빌드 시 baked한 콘솔 키를 REST 헤더·WS 쿼리로 전송(`VITE_API_KEY` nginx build-arg). 키 미설정이면 비활성(개발). 레이트 리밋은 범위 외.
 - **web/console (디자인 개편)**: FE 전면 리디자인 — `design-handoff`(MedicaVox) 디자인 시스템 반영(배경 #eef2f7·블루 프라이머리·Noto Sans), 메시지를 **검증 레코드 카드**로(초벌·최종·역번역·확인 레인 + 색상 레일), **정렬을 쌍별 색 매칭**(배경색, 글씨 검정, hover 강조)으로 표현, **신뢰도** 주황. 상단 바를 **하나로 병합**(실시간 번역 + 번역 방향 + Docs + UI언어 + 테마). 고객 화면에 **상담원 프로필 아바타**(카카오톡식: 연속 버블은 첫 버블만). 국기(KR/US/ID) 방향 선택기. 시나리오·`고객/운영자` 라벨·장식 요소 제거. 용어 한글 통일(초벌/최종/정렬/역번역/신뢰도/확인).
 - **web/console (i18n)**: 콘솔 UI 언어 **KO/EN 토글**(번역 방향과 별개). 라이트/다크 **테마 토글**(선호도 감지 + 저장).
 - **web/console (API Docs)**: 상단 우측 **API Docs** 버튼 → FastAPI Swagger(`/docs`). nginx가 `/docs`·`/openapi.json`·`/redoc`를 게이트웨이로 프록시.
 
 ### 🔧 Infra / Ops
+- **compose/run**: **GPU 기본 · CPU 폴백 실행 런처 `run.sh`** — `nvidia-smi` 감지로 GPU면 `--profile gpu`, 없으면 `--profile cpu`(quality 끔·draft만 CPU)를 자동 선택. vLLM/aligner가 `gpu`/`cpu` **프로파일**로 묶여 있어 `docker compose up`(프로파일 없음)만 쓰면 모델 서버가 안 떠 gateway가 연결 실패한다 → README 경고 + `.env`의 `COMPOSE_PROFILES=gpu` 대안 안내. `.env.example`에 `API_KEYS`·`VITE_API_KEY`·`COMPOSE_PROFILES` 템플릿(생성 키 포함).
 - **compose**: 정렬 서비스를 **컨테이너화**(`aligner/Dockerfile`, simalign+awesome-align, 호스트 HF 캐시 마운트로 재사용) — 이제 `docker compose --profile gpu up` 한 번에 vLLM(draft·quality)+aligner+gateway+nginx **전 스택이 docker**로 뜬다. `ALIGN_URL`을 컨테이너(`aligner:8000`)로.
 
 - **web/console**: 시연용 **대화 시나리오(자유 칩 풀)** — 발표자가 무엇을 칠지 막힐 때 쓰는 편집 가능한 시드 칩. 시나리오(회의 일정/환불/배송) 선택 후 운영자 작성창엔 한국어 시드, 고객 태블릿엔 영어 시드가 칩으로 뜨고, 클릭하면 입력창을 채운다(자동 전송 X, 수정 후 전송). **번역은 항상 실시간** 수행이라 "미리 번역된 것처럼" 보이지 않는다.
