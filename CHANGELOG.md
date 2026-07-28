@@ -7,6 +7,7 @@
 
 ### ✨ Features
 - **api/translations (공개 API)**: 무상태 **`POST /api/v1/translations`** 신설 — 세션 없이 한 번의 번역. `context`로 문맥, **`verify=true`면 품질 확인 데이터(초벌·역번역·신뢰도·정렬·확인)를 함께 반환**(외부 기업이 번역 품질을 확인하는 채널). REST/JSON 표면(protobuf 불필요, WS는 실시간 초벌용 옵션). 엔진 도달 불가 시 `503`.
+- **api (키 관리 DB화)**: API 키를 `.env` 정적 나열에서 **DB(SQLite) 관리**로 전환 — 평문 대신 **SHA-256 해시 저장**, 외부 기업 키를 **런타임 발급·폐기·조회**하는 Admin API **`POST/GET/DELETE /api/v1/api-keys`**(`X-Admin-Key` 보호) 신설. 소비자 검증은 DB 조회(짧은 TTL 인메모리 캐시로 핫패스 보호, 발급·폐기 시 즉시 반영). `.env`의 `API_KEYS`는 **부트스트랩**(콘솔/FE 키를 시작 시 DB에 seed), 외부 키는 Admin API로 발급. 키 레코드가 하나도 없을 때만 인증 비활성(개발) — '전부 폐기'가 인증을 여는 footgun 방지. 폐기는 레코드를 남겨(감사) `last_used_at`와 함께 추적.
 - **api (인증 기본화)**: **API 키 인증을 전 API로 확대** — `/api/v1/*` 전부 `X-API-Key`(↔ `API_KEYS` 쉼표구분)를 요구하고 `languages`도 포함. **WS(stream)는 브라우저가 헤더를 못 실어 `?api_key=` 쿼리로 자체 검증**(accept 전 1008 close), `/health`(라이브니스)만 공개. 콘솔(FE)은 빌드 시 baked한 콘솔 키를 REST 헤더·WS 쿼리로 전송(`VITE_API_KEY` nginx build-arg). 키 미설정이면 비활성(개발). 레이트 리밋은 범위 외.
 - **web/console (디자인 개편)**: FE 전면 리디자인 — `design-handoff`(MedicaVox) 디자인 시스템 반영(배경 #eef2f7·블루 프라이머리·Noto Sans), 메시지를 **검증 레코드 카드**로(초벌·최종·역번역·확인 레인 + 색상 레일), **정렬을 쌍별 색 매칭**(배경색, 글씨 검정, hover 강조)으로 표현, **신뢰도** 주황. 상단 바를 **하나로 병합**(실시간 번역 + 번역 방향 + Docs + UI언어 + 테마). 고객 화면에 **상담원 프로필 아바타**(카카오톡식: 연속 버블은 첫 버블만). 국기(KR/US/ID) 방향 선택기. 시나리오·`고객/운영자` 라벨·장식 요소 제거. 용어 한글 통일(초벌/최종/정렬/역번역/신뢰도/확인).
 - **web/console (i18n)**: 콘솔 UI 언어 **KO/EN 토글**(번역 방향과 별개). 라이트/다크 **테마 토글**(선호도 감지 + 저장).

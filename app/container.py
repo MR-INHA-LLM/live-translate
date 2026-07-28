@@ -12,6 +12,7 @@ from app.engines.registry import ModelRegistry
 from app.repositories.base import ConversationRepository, SessionRepository
 from app.repositories.cache import RenderingCache
 from app.services.alignment import AlignerPort
+from app.services.api_key import ApiKeyService
 from app.services.conversation import ConversationService
 from app.services.draft import DraftService
 from app.services.language import LanguageService
@@ -35,3 +36,4 @@ class Container:
     conversation_service: ConversationService
     translation_service: TranslationService
     language_service: LanguageService
+    api_key_service: ApiKeyService

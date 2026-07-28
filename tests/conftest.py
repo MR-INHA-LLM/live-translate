@@ -5,7 +5,9 @@ vLLM draft 서버(:8001)가 떠 있어야 한다. 게이트웨이는 미사용 �
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -20,9 +22,19 @@ BASE = f"http://127.0.0.1:{PORT}"
 @pytest.fixture(scope="session")
 def server() -> str:
     """uvicorn 게이트웨이를 서브프로세스로 띄우고 /health 준비를 기다린다."""
+    # E2E는 번역·저장 플로우를 검증한다(인증은 별도 단위 테스트 담당) → 서브프로세스에서
+    # 인증을 끈다. 빈 env 변수가 .env의 API_KEYS/ADMIN_API_KEY 를 오버라이드(auth 비활성).
+    # DB도 임시 파일로 격리 — 공유 ./data/app.db에 seed된 키가 auth를 켜지 않도록.
+    tmp_db = Path(tempfile.mkdtemp()) / "e2e.db"
     proc = subprocess.Popen(
         ["uv", "run", "uvicorn", "app.main:app", "--port", str(PORT), "--log-level", "warning"],
         cwd=str(ROOT),
+        env={
+            **os.environ,
+            "API_KEYS": "",
+            "ADMIN_API_KEY": "",
+            "DB_URL": f"sqlite+aiosqlite:///{tmp_db}",
+        },
     )
     try:
         deadline = time.time() + 90

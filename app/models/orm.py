@@ -16,6 +16,24 @@ class Base(DeclarativeBase):
     """ORM 베이스."""
 
 
+class ApiKeyRow(Base):
+    """발급된 공개 API 키.
+
+    평문 키는 저장하지 않는다 — `key_hash`(SHA-256)만 두고 검증은 해시 비교로 한다
+    (비밀번호와 동일 원칙). `prefix`는 목록에서 식별하기 위한 앞부분 표시용.
+    """
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(24))  # 표시용 앞부분(예: lt_ext_9fK2…)
+    label: Mapped[str] = mapped_column(String(120))  # 소유자/용도(예: 회사명)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class SessionRow(Base):
     """세션 레코드."""
 
@@ -28,7 +46,7 @@ class SessionRow(Base):
     draft_model: Mapped[str] = mapped_column(String(64))
     quality_model: Mapped[str] = mapped_column(String(64))
 
-    turns: Mapped[list["TurnRow"]] = relationship(back_populates="session")
+    turns: Mapped[list[TurnRow]] = relationship(back_populates="session")
 
 
 class TurnRow(Base):
@@ -62,7 +80,7 @@ class ConversationRow(Base):
     title: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    messages: Mapped[list["MessageRow"]] = relationship(
+    messages: Mapped[list[MessageRow]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
 

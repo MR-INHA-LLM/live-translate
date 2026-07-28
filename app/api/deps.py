@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Header, HTTPException, Request, status
 
 from app.container import Container
+from app.services.api_key import ApiKeyService
 from app.services.conversation import ConversationService
 from app.services.language import LanguageService
 from app.services.quality import QualityService
@@ -19,23 +22,48 @@ def get_container(request: Request) -> Container:
     return request.app.state.container
 
 
-def verify_api_key(
+def get_api_key_service(request: Request) -> ApiKeyService:
+    return get_container(request).api_key_service
+
+
+async def verify_api_key(
     request: Request,
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
 ) -> None:
-    """공개 API 키 검증. 설정된 키가 없으면(개발/데모) 통과, 있으면 X-API-Key 요구.
+    """공개 API 키 검증(DB 기반). 활성 키가 없으면(개발/데모) 통과, 있으면 X-API-Key 요구.
 
     Raises:
         HTTPException(401): 키 미제공 또는 불일치.
     """
-    keys: set[str] = getattr(request.app.state, "api_keys", set())
-    if not keys:
-        return
-    if x_api_key not in keys:
+    if not await get_container(request).api_key_service.verify(x_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or missing API key",
             headers={"WWW-Authenticate": "API-Key"},
+        )
+
+
+def verify_admin_key(
+    request: Request,
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+) -> None:
+    """Admin API(키 관리) 보호. 관리자 키 미설정이면 비활성(503).
+
+    Raises:
+        HTTPException(503): ADMIN_API_KEY 미설정.
+        HTTPException(401): 관리자 키 불일치.
+    """
+    admin: str = getattr(request.app.state, "admin_api_key", "")
+    if not admin:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin API disabled (set ADMIN_API_KEY)",
+        )
+    if not secrets.compare_digest(x_admin_key or "", admin):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid admin key",
+            headers={"WWW-Authenticate": "Admin-Key"},
         )
 
 

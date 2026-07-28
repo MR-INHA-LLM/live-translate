@@ -175,5 +175,17 @@ class ConversationDetail:
     messages: list[StoredMessage]
 
 
+@dataclass(frozen=True)
+class ApiKey:
+    """발급된 API 키의 공개 메타. 평문 키는 담지 않는다(발급 응답에서 1회만 노출)."""
+
+    id: str
+    label: str
+    prefix: str  # 표시용 앞부분 (예: lt_ext_9fK2…)
+    enabled: bool
+    created_at: datetime
+    last_used_at: datetime | None = None
+
+
 # 코디네이터가 초벌 업데이트를 밖으로 흘려보내는 콜백 타입.
 UpdateSink = Callable[[RevisionUpdate], Awaitable[None]]

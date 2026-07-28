@@ -27,12 +27,11 @@ async def draft_stream(ws: WebSocket, session_id: str) -> None:
     브라우저 WS는 커스텀 헤더를 못 실으므로 API 키는 쿼리 파라미터로 받는다
     (`?api_key=…`). 키가 설정돼 있고 불일치면 정책 위반(1008)으로 닫는다.
     """
-    keys: set[str] = getattr(ws.app.state, "api_keys", set())
-    if keys and ws.query_params.get("api_key") not in keys:
+    container = ws.app.state.container
+    if not await container.api_key_service.verify(ws.query_params.get("api_key")):
         await ws.close(code=1008)  # policy violation
         return
     await ws.accept()
-    container = ws.app.state.container
     session = await container.session_service.get(session_id)
     coordinator = DraftSessionCoordinator(container.draft_service, session)
 
