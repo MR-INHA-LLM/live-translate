@@ -40,13 +40,22 @@ services:
       gateway:
         condition: service_healthy
 
-  # Draft tier (초벌, 저지연). 로컬 모델을 마운트해 재다운로드 없이 로드.
+  # Draft tier (초벌, 저지연 · HY-MT1.5-1.8B). 로컬 모델 마운트, 재다운로드 없이 로드.
+  # 플래그는 HY-MT 공식 배포 가이드(vLLM≥0.10)+ 실시간 초벌 특성에 맞춰 튜닝:
+  #  · --dtype bfloat16      공식 권장(모델 가중치 bf16, 자동추론 대신 명시)
+  #  · --enable-prefix-caching  타이핑 중 자라는 prefix + Pombal 컨텍스트 prefix 재사용(핵심)
+  #  · --max-num-seqs 32     초벌은 single-flight·소동시성 → 배치 좁혀 지연 최소화·KV 여유
+  #  · CUDA graph는 기본 ON 유지(--enforce-eager 금지) — 소형 decode-bound 모델 지연에 결정적
+  #  · 반복 페널티 1.05는 서버 아님 → 게이트웨이가 요청 extra_body로 전달(config.draft_repetition_penalty)
+  # (선택) FP8: HY-MT1.5-1.8B-FP8 사용 또는 --quantization fp8. 단 QE가 logprob를 쓰므로
+  #         --kv-cache-dtype fp8은 피하고, 채택 전 품질/지연 실측할 것.
   vllm-draft:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.25.1   # latest 대신 핀(재현성). digest e4f88a…766089
     profiles: ["gpu"]
     command: >
       --model /models/HY-MT1.5-1.8B --served-model-name hy-mt1.5-1.8b
-      --enable-prefix-caching --max-model-len 4096 --gpu-memory-utilization 0.30 --port 8000
+      --dtype bfloat16 --enable-prefix-caching --max-model-len 4096
+      --max-num-seqs 32 --gpu-memory-utilization 0.30 --port 8000
     environment: &vllm_env
       VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
       VLLM_USE_FLASHINFER_SAMPLER: "0"
@@ -70,7 +79,7 @@ services:
 
   # Quality tier (context-aware 최종, Qwen3-4B). draft와 단일 GPU 공유.
   vllm-quality:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.25.1   # draft와 동일 버전 핀(재현성)
     profiles: ["gpu"]
     command: >
       --model /models/Qwen3-4B-Instruct-2507 --served-model-name qwen3-4b-instruct
