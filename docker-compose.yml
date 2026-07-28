@@ -31,6 +31,8 @@ services:
     build:
       context: .
       dockerfile: deploy/Dockerfile.nginx
+      args:
+        VITE_API_KEY: ${VITE_API_KEY:-}   # 콘솔 키(빌드 시 baked). API_KEYS 중 하나와 일치시킬 것
     restart: unless-stopped
     ports:
       - "18090:80"

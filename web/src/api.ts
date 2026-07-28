@@ -5,6 +5,15 @@
 // 별도 게이트웨이 주소를 쓰려면 VITE_API_BASE=http://host:8000.
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
 
+// 콘솔용 API 키(빌드 시 주입). 설정돼 있으면 REST엔 X-API-Key, WS엔 ?api_key 로 실린다.
+// 비어 있으면(인증 비활성 배포) 아무것도 붙이지 않는다.
+const API_KEY = (import.meta.env.VITE_API_KEY as string | undefined) ?? "";
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { ...(extra ?? {}) };
+  if (API_KEY) h["X-API-Key"] = API_KEY;
+  return h;
+}
+
 export interface LanguageInfo {
   code: string;
   name_en: string;
@@ -105,7 +114,7 @@ export async function createConversation(body: {
 }): Promise<string> {
   const r = await fetch(`${API_BASE}/api/v1/conversations`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`create conversation ${r.status}`);
@@ -113,13 +122,13 @@ export async function createConversation(body: {
 }
 
 export async function listConversations(): Promise<ConversationSummary[]> {
-  const r = await fetch(`${API_BASE}/api/v1/conversations`);
+  const r = await fetch(`${API_BASE}/api/v1/conversations`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`list conversations ${r.status}`);
   return r.json();
 }
 
 export async function getConversation(id: string): Promise<ConversationDetail> {
-  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`);
+  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`get conversation ${r.status}`);
   return r.json();
 }
@@ -127,19 +136,19 @@ export async function getConversation(id: string): Promise<ConversationDetail> {
 export async function addMessage(id: string, body: MessageInput): Promise<void> {
   const r = await fetch(`${API_BASE}/api/v1/conversations/${id}/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`add message ${r.status}`);
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`, { method: "DELETE" });
+  const r = await fetch(`${API_BASE}/api/v1/conversations/${id}`, { method: "DELETE", headers: authHeaders() });
   if (!r.ok) throw new Error(`delete conversation ${r.status}`);
 }
 
 export async function getLanguages(): Promise<LanguageCatalog> {
-  const r = await fetch(`${API_BASE}/api/v1/languages`);
+  const r = await fetch(`${API_BASE}/api/v1/languages`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`languages ${r.status}`);
   return r.json();
 }
@@ -147,7 +156,7 @@ export async function getLanguages(): Promise<LanguageCatalog> {
 export async function createSession(config: SessionConfig): Promise<string> {
   const r = await fetch(`${API_BASE}/api/v1/sessions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(config),
   });
   if (!r.ok) throw new Error(`create session ${r.status}`);
@@ -156,7 +165,8 @@ export async function createSession(config: SessionConfig): Promise<string> {
 
 export function openDraftSocket(sessionId: string): WebSocket {
   const httpBase = API_BASE || `${location.protocol}//${location.host}`;
-  const url = httpBase.replace(/^http/, "ws") + `/api/v1/sessions/${sessionId}/stream`;
+  const q = API_KEY ? `?api_key=${encodeURIComponent(API_KEY)}` : "";
+  const url = httpBase.replace(/^http/, "ws") + `/api/v1/sessions/${sessionId}/stream${q}`;
   return new WebSocket(url);
 }
 
@@ -170,7 +180,7 @@ export async function streamTurn(
 ): Promise<void> {
   const r = await fetch(`${API_BASE}/api/v1/sessions/${sessionId}/turns`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ text, context }),
     signal,
   });

@@ -4,6 +4,9 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+# 콘솔용 API 키를 빌드 시 주입(Vite는 VITE_* 를 번들에 baked). 인증 켤 때만 값 전달.
+ARG VITE_API_KEY=""
+ENV VITE_API_KEY=$VITE_API_KEY
 RUN npm run build
 
 FROM nginx:alpine
