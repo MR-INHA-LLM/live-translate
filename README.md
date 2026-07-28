@@ -1,157 +1,121 @@
 # live-translate
 
-타이핑 중에는 경량 번역 모델이 즉시 초벌 번역을 스트리밍하고 입력이 확정되면 LLM이 대화 맥락을 반영해 자연스럽게 재번역하는 **이중 파이프라인 텍스트 번역 시스템**.
+운영자와 외국인 고객의 대화를 위한 **이중 파이프라인 실시간 텍스트 번역 시스템**.
+타이핑 중에는 경량 모델이 즉시 **초벌**을 스트리밍하고, 문장이 확정되면 LLM이
+**대화 맥락을 반영한 최종 번역**을 내놓는다. 번역이 맞는지 사용자가 눈으로 확인할 수
+있도록 **검증 장치**를 함께 보여주고, 외부에서 품질을 확인할 수 있도록 **공개 API**를 연다.
 
-- **Draft tier** — 저지연 초벌 번역. 타이핑 중 매 변경마다 갱신.
-- **Quality tier** — 확정 문장을 대화 맥락 기반으로 재번역. context-aware reranking(QAD) 선택 가능.
+- **초벌 (draft)** — 저지연. 타이핑 중 매 변경마다 갱신.
+- **최종 (quality)** — 확정 문장을 직전 맥락 기반으로 재번역. 사용 LLM은 **설정으로 교체 가능**.
+- **검증 (verification)** — 정렬 · 역번역 · 신뢰도(QE) · 확인(제3 언어)으로 번역을 교차 점검.
 
-> **범위 제외:** STT / ASR / TTS / 음성 입출력. 본 프로젝트는 텍스트 전용입니다.
-> 다만 입력 인터페이스는 "확정되지 않은 부분 텍스트(partial text) 스트림"으로 추상화되어 있어, 후속 음성 프로젝트에서 STT의 partial hypothesis를 그대로 연결할 수 있습니다.
+> **범위 제외:** 음성(STT/TTS). 텍스트 전용이다. 다만 입력은 "확정되지 않은 부분 텍스트
+> 스트림"으로 추상화돼 있어, 후속 음성 프로젝트에서 STT의 partial hypothesis를 그대로 이을 수 있다.
 
-이 README는 **고수준 개요**만 담습니다. 구체 수치·데이터 모델·프로토콜·측정값 등 자주 바뀌는 내용은 아래 문서에 있습니다.
+이 README는 **고수준 개요**만 담는다. 자주 바뀌는 수치·모델·데이터 모델·프로토콜·측정값은
+아래 문서를 소스로 한다.
 
 | 문서 | 내용 |
 |---|---|
-| [`docs/design.md`](docs/design.md) | **상세 설계서** — 데이터 모델 · 파이프라인 · 프로토콜 · 데모 UX (구현 기준) |
-| [`docs/user-scenario.md`](docs/user-scenario.md) | **사용자 시나리오** — 데모를 사용자 눈높이에서 걸어보기 |
-| [`docs/backend-architecture.md`](docs/backend-architecture.md) | **BE 아키텍처** — 레이어 · 포트/어댑터 · SOLID · 동시성 (게이트웨이 구조 기준) |
-| [`docs/frontend-architecture.md`](docs/frontend-architecture.md) | **FE 아키텍처** — 컴포넌트 · 상태 · WS/SSE 클라이언트 · 품질 표시 (데모 구조 기준) |
-| [`docs/decisions.md`](docs/decisions.md) | 설계 결정 이력 — 왜 이 설계인가 (모델 선정 근거 · 실측 결론) |
+| [`docs/design.md`](docs/design.md) | 상세 설계 — 데이터 모델 · 파이프라인 · 프로토콜 · 데모 UX |
+| [`docs/backend-architecture.md`](docs/backend-architecture.md) | BE 아키텍처 — 레이어 · 포트/어댑터 · 동시성 |
+| [`docs/frontend-architecture.md`](docs/frontend-architecture.md) | FE 아키텍처 — 컴포넌트 · 상태 · WS/SSE 클라이언트 |
+| [`docs/decisions.md`](docs/decisions.md) | 설계 결정 이력 — 왜 이 설계인가(모델 선정·실측 결론) |
 | [`docs/serving.md`](docs/serving.md) | 서빙/운영 — GPU 배치 · 기동 · 환경 플래그 |
-| [`bench/RESULTS_M0.md`](bench/RESULTS_M0.md) | M0 실측 원본 데이터 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 변경 이력 |
 
 ---
 
-## 1. 모델 선정
-
-- **Draft tier — `tencent/HY-MT1.5-1.8B`.** 소형·실시간 지향 번역 전용 모델. M0에서 6방향(ko/en/id) 실측 검증 후 확정. 후보 비교·측정 결과는 [`docs/decisions.md`](docs/decisions.md).
-- **Quality tier — Gemma 4 계열 소형 모델(기준 `gemma-4-E2B`).** vLLM OpenAI 호환 API 뒤라 **언제든 교체 가능**. 서빙 가능 여부·배치는 M1에서 확정.
-- **Reranker (QAD, 선택)** — reference-free 품질 추정(CometKiwi)으로 후보 리랭킹. 지연이 후보 수에 비례 → API 토글.
-
----
-
-## 2. 아키텍처
+## 아키텍처
 
 ```
-┌──────────────┐
-│  Demo (Web)  │
-└──────┬───────┘
-       │ WS  /api/v1/sessions/{id}/stream   (초벌: partial text → draft)
-       │ SSE /api/v1/sessions/{id}/turns    (최종: 확정 문장 → quality)
-       ▼
-┌──────────────────────────────────────────────┐
-│  Gateway (FastAPI, :8000)                    │
-│   ├─ SessionStore   대화 이력 / 언어쌍 / 도메인 │
-│   ├─ DraftRouter    디바운스·취소·다중 타겟     │
-│   ├─ QualityRouter  컨텍스트 프롬프트 구성      │
-│   └─ Reranker       (optional) CometKiwi      │
-└───────┬──────────────────────┬───────────────┘
-        │ OpenAI-compatible    │ OpenAI-compatible
-        ▼                      ▼
-┌───────────────────┐  ┌───────────────────┐
-│ vLLM :8001        │  │ vLLM :8002        │
-│ draft             │  │ quality           │
-└───────────────────┘  └───────────────────┘
+┌────────────┐   WS  초벌(부분 텍스트 → draft)
+│  Console   │   SSE 최종(확정 문장 → quality)
+│   (Web)    │   REST 세션·대화·무상태 번역·키 관리
+└─────┬──────┘
+      ▼
+┌─────────────────────────────────────────────┐
+│  Gateway (FastAPI)                           │
+│   세션 · 라우팅 · 맥락 프롬프트 · 검증 · 인증  │
+└───┬───────────────┬───────────────┬─────────┘
+    │ OpenAI 호환    │ OpenAI 호환    │ HTTP
+    ▼               ▼               ▼
+ draft 모델      quality 모델      정렬(align)
+  서버            서버              서비스
 ```
 
-**두 tier는 반드시 별도 vLLM 인스턴스.** 같은 엔진이면 초벌이 최종 뒤에 큐잉되어 저지연 목표를 못 맞춥니다. GPU 배치(단일/듀얼)는 [`docs/serving.md`](docs/serving.md).
-
-- **초벌 안정화** — 타이핑마다 번역 전체가 바뀌는 flicker를 억제. 디바운스 · IME 조합 제거 · tentative 렌더 · revision 순서제어로 처리. 상세·실측 근거는 [`docs/design.md`](docs/design.md) §4.
-- **최종 컨텍스트 (TMC)** — 직전 N턴의 이중언어 원문/번역을 프롬프트에 포함해 대명사·격식·생략을 복원. Pombal et al. (TACL 2026) 기반. 상세는 [`docs/design.md`](docs/design.md) §5.
+- **모델은 OpenAI 호환 서버(vLLM) 뒤**에 둔다 — 게이트웨이는 엔진 구현에 의존하지 않는다.
+- **초벌·최종은 별도 모델 인스턴스.** 같은 엔진이면 초벌이 최종 뒤에 큐잉돼 저지연을 못 맞춘다.
+- **초벌 안정화** — 디바운스 · single-flight · IME 조합 처리로 타이핑 중 flicker/백로그를 억제.
+- **최종 맥락** — 직전 턴들의 원문을 프롬프트에 주입해 대명사·생략·격식을 복원(맥락 기반 번역).
+- **엔진·모델은 교체 가능**하도록 설계 — 고정 요소와 교체 요소는 [`docs/decisions.md`](docs/decisions.md).
 
 ---
 
-## 3. API
+## API
 
-| 엔드포인트 | 용도 |
+공개 **REST + 스트리밍**(초벌 WS · 최종 SSE) + **무상태 단발 번역**을 제공한다. 외부 소비자가
+번역 품질을 확인하는 채널로, 무상태 번역은 요청 시 검증 데이터(초벌·역번역·신뢰도·정렬·확인)를
+함께 반환한다.
+
+| 표면 | 용도 |
 |---|---|
-| `POST /api/v1/sessions` | 세션 생성(언어쌍·도메인·격식·모델·rerank 설정) |
-| `GET /api/v1/languages` | 지원 언어 · 검증된 쌍 |
-| `WS /api/v1/sessions/{id}/stream` | 초벌 스트리밍(revision 단위, 다중 타겟 렌더) |
-| `POST /api/v1/sessions/{id}/turns` (SSE) | 최종 번역(턴 생성) 스트리밍 |
-| `GET /api/v1/sessions/{id}/turns` | 턴별 원문/초벌/최종/레이턴시 이력 |
-| `GET /health`, `GET /metrics` | 모델 로드 상태 · tier별 레이턴시 히스토그램 |
+| 세션 · 초벌(WS) · 최종(SSE) | 실시간 번역 파이프라인 |
+| 무상태 번역 | 세션 없이 한 번의 번역(+검증) |
+| 대화 저장소 | 확정 대화의 영속·목록·복원 |
+| 언어 카탈로그 | 지원 언어·검증된 쌍 |
+| 키 관리(Admin) | API 키 발급·폐기·조회 |
 
-> RESTful 네이밍·프로젝트 구조는 `fastapi-standards` 준수. 요청/응답 스키마·메시지 포맷·에러 코드는 [`docs/design.md`](docs/design.md) §6, BE 구조는 [`docs/backend-architecture.md`](docs/backend-architecture.md).
-
----
-
-## 4. 성능 목표
-
-| 지표 | 목표 |
-|---|---|
-| 초벌 TTFT | ≤ 150 ms |
-| 초벌 완료 | ≤ 400 ms |
-| 최종 TTFT | ≤ 1 s |
-| 최종 완료 (rerank off) | ≤ 2 s |
-| 최종 완료 (rerank on, N=4) | ≤ 5 s |
-
-- **Prefix caching 필수.** 타이핑 중 요청은 접두어가 겹침 → KV 캐시 재사용이 곧 지연시간.
-- 초벌은 greedy(`temperature=0`), `max_tokens` 타이트하게. 안정성 > 다양성.
-- **Graceful degradation** — quality tier 실패 시 초벌 결과를 최종으로 승격.
-
-> 초벌의 M0 실측 수치는 [`bench/RESULTS_M0.md`](bench/RESULTS_M0.md).
+- **인증** — `/health`를 제외한 전 API가 **API 키**를 요구한다(REST는 헤더, WS는 쿼리). 키는
+  **DB에서 관리**(해시 저장)하며 외부 기업 키는 **Admin API로 런타임 발급·폐기**한다. 부트스트랩·
+  키 관리 절차는 [`.env.example`](.env.example)와 [`docs/serving.md`](docs/serving.md).
+- **전체 스펙**은 서비스 기동 후 Swagger `/docs`(OpenAPI). RESTful 규약·스키마는
+  [`docs/design.md`](docs/design.md)·[`docs/backend-architecture.md`](docs/backend-architecture.md).
 
 ---
 
-## 5. 실행
+## 실행
 
-요구사항·GPU 배치·기동 명령·환경 플래그는 [`docs/serving.md`](docs/serving.md).
+전 스택(모델 서버 · 정렬 · 게이트웨이 · 콘솔)을 docker compose로 띄운다. 환경 변수는
+`.env`로 관리한다([`.env.example`](.env.example) 복사).
 
 ```bash
-./run.sh -d          # GPU 자동감지 → vLLM(draft·quality)+aligner+gateway+nginx 전부 docker
-                     # GPU 없으면 자동으로 cpu 프로파일. http://localhost:18090 · Swagger /docs
+cp .env.example .env      # 키·모델·프로파일 설정
+./run.sh -d               # GPU 자동감지 → 있으면 GPU, 없으면 CPU 프로파일
 ```
 
-⚠️ vLLM/aligner 는 `gpu`/`cpu` **프로파일**로 묶여 있어 `docker compose up`(프로파일 없음)만
-쓰면 모델 서버가 안 떠서 gateway 가 연결 실패한다. `./run.sh` 또는 `docker compose --profile gpu up`
-을 쓰거나, `.env`에 `COMPOSE_PROFILES=gpu` 를 둔다. 전제: `nvidia-container-toolkit`.
+> 모델 서버는 실행 **프로파일**(gpu/cpu)로 묶여 있어, 프로파일 없이 `docker compose up`만
+> 쓰면 모델이 안 뜬다. `./run.sh`(자동 감지)를 쓰거나 `.env`에 실행 프로파일을 지정한다.
+> GPU 요구사항·배치·기동 옵션은 [`docs/serving.md`](docs/serving.md).
 
 ---
 
-## 6. 프로젝트 구조
+## 설정 (env)
+
+`.env` 한 곳에서 관리한다([`.env.example`](.env.example)에 전 항목 문서화):
+
+- **모델** — 최종 LLM의 로드 소스(HuggingFace repo id 또는 로컬 경로)와 컨텍스트·GPU 예산.
+  초벌 모델은 고정, 최종 LLM은 교체 가능.
+- **인증** — 부트스트랩 API 키(시작 시 DB에 seed) · 콘솔(FE) 키 · Admin 키 · 실행 프로파일.
+- **엔드포인트** — 모델/정렬 서비스 주소(기본값은 compose 내부 네트워크).
+
+---
+
+## 프로젝트 구조
 
 ```
-app/     FastAPI 게이트웨이 (라우터 · 엔진 클라이언트 · 프롬프트 · 세션)
-web/     데모 프론트엔드
-bench/   측정 하네스 (M0~) + RESULTS_M0.md
-docs/    설계서 · 결정 이력 · 서빙 가이드
+app/       FastAPI 게이트웨이 (라우터 · 엔진 클라이언트 · 프롬프트 · 서비스 · 저장소)
+web/       콘솔 프론트엔드
+aligner/   정렬(단어 대응) 서비스
+bench/     측정 하네스 + 결과
+deploy/    nginx · 컨테이너 정의
+docs/      설계 · 결정 이력 · 서빙 가이드
 ```
 
 ---
 
-## 7. 데모
-
-데모가 증명하려는 주장은 "quality tier가 지연을 정당화한다"입니다. 짧은 문장에선 draft==final이라 효과가 드러나지 않으므로, **id를 모르는 사용자도 witness 언어(en)로 개선을 읽게** 하는 것을 목표로 합니다. 상세 UX는 [`docs/design.md`](docs/design.md) §8.
-
----
-
-## 8. 마일스톤
-
-- [x] **M0** — draft 모델 실측 → **`HY-MT1.5-1.8B` 확정**. 근거 [`docs/decisions.md`](docs/decisions.md).
-- [ ] **M1** — vLLM 2-tier 서빙 + gateway 배선. 레이턴시 측정.
-- [ ] **M2** — WS 초벌 스트리밍 + 안정화(IME, tentative 렌더). **flicker 없는 상태 확보.**
-- [ ] **M3** — TMC 컨텍스트 프롬프트 + SSE 최종.
-- [ ] **M4** — QAD 리랭킹 + API 토글.
-- [ ] **M5** — 데모 프론트 + 시나리오.
-
----
-
-## 9. 열린 이슈
-
-- 리랭킹 metric을 context-aware 변형으로 학습할지, 표준 CometKiwi로 갈지.
-- 대화 이력이 길어질 때 컨텍스트 절단 vs 요약.
-- 언어 커버리지 요구가 draft 모델 지원 범위를 넘으면 재선정.
-
-> 해소된 이슈(예: ko↔id 영어 피벗)는 [`docs/decisions.md`](docs/decisions.md)에 이력으로 남깁니다.
-
----
-
-## 10. 참고
+## 참고
 
 - Pombal et al. (2026). *A Context-aware Framework for Translation-mediated Conversations.* TACL. — arXiv:2412.04205
 - Tencent Hunyuan (2026). *HY-MT1.5 Technical Report.* — arXiv:2512.24092
 - Zheng et al. (2025). *Hunyuan-MT Technical Report.* — arXiv:2509.05209
-- NiuTrans (2025). *NiuTrans.LMT.* — arXiv:2511.07003
-- Finkelstein et al. (2026). *TranslateGemma Technical Report.*
-- Gemma 4 model card — https://ai.google.dev/gemma/docs/core/model_card_4
