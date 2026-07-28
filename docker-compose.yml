@@ -10,7 +10,7 @@ services:
       QUALITY_URL: ${QUALITY_URL:-http://vllm-quality:8000/v1}
       ALIGN_URL: ${ALIGN_URL:-http://aligner:8000}                       # awesome-align 정렬 컨테이너
       DRAFT_MODEL: hy-mt1.5-1.8b
-      QUALITY_MODEL: qwen3-4b-instruct
+      QUALITY_MODEL: ${QUALITY_MODEL:-qwen3-4b-instruct}   # 서빙 별칭(=vLLM --served-model-name). 게이트웨이 라우팅 키
       QUALITY_ENABLED: ${QUALITY_ENABLED:-true}   # CPU 배포: false → 최종을 draft로 degrade
       API_KEYS: ${API_KEYS:-}                      # 공개 API 키(쉼표구분). 비면 인증 비활성
       DB_URL: sqlite+aiosqlite:////data/app.db
@@ -60,6 +60,7 @@ services:
       VLLM_WSL2_ENABLE_PIN_MEMORY: "1"
       VLLM_USE_FLASHINFER_SAMPLER: "0"
       VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
+      HF_TOKEN: ${HF_TOKEN:-${HF_API_KEY:-}}   # gated 모델(예: Gemma) 다운로드용(.env의 HF_API_KEY 매핑)
     volumes:
       - ./models:/models:ro
       - hf-cache:/root/.cache/huggingface
@@ -77,13 +78,21 @@ services:
               count: 1
               capabilities: [gpu]
 
-  # Quality tier (context-aware 최종, Qwen3-4B). draft와 단일 GPU 공유.
+  # Quality tier (context-aware 최종). draft(HY-MT 고정)와 달리 LLM은 교체 가능 →
+  # 로드 소스·서빙 별칭·컨텍스트/메모리를 .env로 관리:
+  #  · QUALITY_MODEL_ID   HF repo id(예: google/gemma-2-2b-it → hf-cache 볼륨으로 자동 다운로드)
+  #                       또는 로컬 경로(/models/… → ./models 마운트). 기본 Qwen3-4B 로컬.
+  #  · QUALITY_MODEL      서빙 별칭(=게이트웨이 라우팅 키). 모델 바꿔도 그대로 둬도 됨(임의 별칭).
+  #  · QUALITY_MAX_MODEL_LEN / QUALITY_GPU_UTIL   모델별 컨텍스트·GPU 점유 튜닝.
+  #  gated 모델은 .env HF_API_KEY(→HF_TOKEN) 필요.
   vllm-quality:
     image: vllm/vllm-openai:v0.25.1   # draft와 동일 버전 핀(재현성)
     profiles: ["gpu"]
     command: >
-      --model /models/Qwen3-4B-Instruct-2507 --served-model-name qwen3-4b-instruct
-      --enable-prefix-caching --max-model-len 8192 --gpu-memory-utilization 0.50 --port 8000
+      --model ${QUALITY_MODEL_ID:-/models/Qwen3-4B-Instruct-2507}
+      --served-model-name ${QUALITY_MODEL:-qwen3-4b-instruct}
+      --enable-prefix-caching --max-model-len ${QUALITY_MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${QUALITY_GPU_UTIL:-0.50} --port 8000
     environment: *vllm_env
     volumes:
       - ./models:/models:ro
